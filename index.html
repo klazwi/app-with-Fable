@@ -145,6 +145,27 @@ pre{margin:0;padding:12px 14px;background:var(--surface);border:1px solid var(--
 .authcard .verify{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
 .authcard .verify label{align-self:stretch}
 .lede{font-family:var(--font-read);font-size:1.05rem;color:var(--muted);margin:0}
+.auth .brand{justify-content:center}
+.auth .lede{text-align:center;text-wrap:balance}
+.logo{display:block;width:132px;height:auto;margin:0 auto -4px}
+.brand h1{display:flex;align-items:center;gap:10px}
+.mark{width:26px;height:26px;flex:none}
+
+/* app layout: the views are picked in a column on the left; on a narrow screen that column becomes a row above the content */
+#app>.main{display:contents}
+#app>.main>header{order:-2}
+#app>nav{order:-1}
+@media (min-width:900px){
+  #app{max-width:980px;flex-direction:row;align-items:flex-start;gap:44px}
+  #app>.main{display:flex;flex-direction:column;gap:22px;flex:1;min-width:0;max-width:680px}
+  #app>nav{order:0;flex:none;width:210px;position:sticky;top:20px;flex-direction:column;gap:4px;border-bottom:0;border-right:1px solid var(--line);padding:4px 16px 4px 0;overflow:visible}
+  #app>nav a{white-space:normal;border-bottom:0;margin-bottom:0;border-left:3px solid transparent;border-radius:0 6px 6px 0;padding:9px 12px}
+  #app>nav a:hover{background:var(--surface)}
+  #app>nav a[aria-current="page"]{border-left-color:var(--rubric);background:var(--surface)}
+  #app>nav .label{padding:0 12px 8px 15px}
+}
+#app>nav .label{display:none}
+@media (min-width:900px){#app>nav .label{display:block}}
 footer{color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:16px}
 footer p{margin:0 0 6px}
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .6s ease}.switch .track::after{transition:left .15s ease}}
@@ -152,6 +173,20 @@ footer p{margin:0 0 6px}
 </head>
 <body>
 <main class="page auth" id="auth-screen" hidden>
+  <svg class="logo" viewBox="0 0 160 150" role="img" aria-label="Krzyż w promieniach nad otwartą księgą">
+    <circle cx="80" cy="62" r="52" fill="none" stroke="var(--rubric)" stroke-width="9" stroke-dasharray="1.7 11.913" opacity=".55"/>
+    <circle cx="80" cy="62" r="40" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+    <circle cx="80" cy="62" r="34" fill="none" stroke="var(--rubric)" stroke-width="1" opacity=".45"/>
+    <path fill="var(--rubric)" d="M76.5 36h7a1.5 1.5 0 0 1 1.5 1.5V50h12.5a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H85v27.500a1.5 1.5 0 0 1-1.5 1.5h-7a1.5 1.5 0 0 1-1.5-1.5V59H62.500a1.5 1.5 0 0 1-1.5-1.5v-6a1.5 1.500 0 0 1 1.5-1.5H75V37.500a1.5 1.5 0 0 1 1.5-1.5z"/>
+    <g fill="var(--paper)" stroke="var(--ink)" stroke-width="1.8" stroke-linejoin="round">
+      <path d="M80 121c-8-6.500-21-7.500-34-4v18c13-3.500 26-2.500 34 4z"/>
+      <path d="M80 121c8-6.500 21-7.500 34-4v18c-13-3.500-26-2.500-34 4z"/>
+    </g>
+    <g fill="none" stroke="var(--muted)" stroke-width="1.1" stroke-linecap="round">
+      <path d="M52 123.500c8-1.500 15.500-1 22 1.800M52 128.500c8-1.500 15.500-1 22 1.800"/>
+      <path d="M108 123.500c-8-1.500-15.500-1-22 1.800M108 128.500c-8-1.500-15.500-1-22 1.800"/>
+    </g>
+  </svg>
   <div class="brand"><h1>Słowo na dziś</h1></div>
   <p class="lede">Cytat z Biblii na każdy dzień, modlitwa i rozmowa o tym, co przeżywasz.</p>
   <div class="authcard">
@@ -179,9 +214,20 @@ footer p{margin:0 0 6px}
 </main>
 
 <div class="page" id="app" hidden>
+  <nav aria-label="Widoki">
+    <span class="label">Widoki</span>
+    <a href="#dzis" id="tab-dzis">Cytat dnia</a>
+    <a href="#modlitwa" id="tab-modlitwa">Modlitwa na dziś</a>
+    <a href="#sytuacja" id="tab-sytuacja">Moja sytuacja</a>
+    <a href="#st" id="tab-st">Stary Testament</a>
+    <a href="#nt" id="tab-nt">Nowy Testament</a>
+    <a href="#zapisane" id="tab-zapisane">Zapisane</a>
+    <a href="#konto" id="tab-konto">Konto</a>
+  </nav>
+  <div class="main">
   <header>
     <div class="brand">
-      <h1>Słowo na dziś</h1>
+      <h1><svg class="mark" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12.5" fill="var(--surface)" stroke="var(--rubric)" stroke-width="1.2"/><path fill="var(--rubric)" d="M12.500 6h3v5h4.500v3h-4.500v8h-3v-8H8v-3h4.500z"/></svg>Słowo na dziś</h1>
       <span class="date" id="date"></span>
     </div>
     <div class="langpick" id="langpick">
@@ -193,14 +239,6 @@ footer p{margin:0 0 6px}
         <div class="scroll" id="lang-list"></div>
       </div>
     </div>
-    <nav aria-label="Widoki">
-      <a href="#dzis" id="tab-dzis">Cytat dnia</a>
-      <a href="#modlitwa" id="tab-modlitwa">Modlitwa na dziś</a>
-      <a href="#sytuacja" id="tab-sytuacja">Moja sytuacja</a>
-      <a href="#nt" id="tab-nt">Biblia</a>
-      <a href="#zapisane" id="tab-zapisane">Zapisane</a>
-      <a href="#konto" id="tab-konto">Konto</a>
-    </nav>
   </header>
 
   <section id="view-dzis">
@@ -246,6 +284,7 @@ footer p{margin:0 0 6px}
   </section>
 
   <section id="view-nt" hidden>
+    <h2 id="reader-title"></h2>
     <div class="row">
       <label class="label" for="book">Księga</label>
       <select id="book"></select>
@@ -294,6 +333,7 @@ footer p{margin:0 0 6px}
     <p>Przekłady z domeny publicznej: Biblia Gdańska (wyd. 1881), King James Version, Reina-Valera 1909, Elberfelder 1905, Crampon 1923, Riveduta (Luzzi), Bibeln 1917. Stąd dawny język. Numeracja wersetów zgodna z danym przekładem, dlatego w kilku miejscach ten sam numer w różnych językach wskazuje sąsiedni werset.</p>
     <p>Cytat dnia zmienia się o północy czasu twojego urządzenia.</p>
   </footer>
+  </div>
 </div>
 
 <script src="vendor/bcrypt.min.js"></script>
@@ -396,8 +436,12 @@ function loadLocal(){
   favs=store.get(K("favs"),[]);if(!Array.isArray(favs))favs=[];favs=favs.filter(validKey);
 }
 function saveLocal(){store.set(K("main"),main);store.set(K("extra"),extra);store.set(K("favs"),favs);store.set(K("src"),src)}
-let pos=store.get("slowo.pos",["nt",0,1]);if(Array.isArray(pos)&&pos.length===2)pos=["nt",pos[0],pos[1]];   // [testament, book, chapter]; older versions kept [book, chapter]
-if(!Array.isArray(pos)||!TS[pos[0]]||!TS[pos[0]].c[pos[1]]||!(pos[2]>=1&&pos[2]<=TS[pos[0]].c[pos[1]].length))pos=["nt",0,1];
+// where the reader is in each testament: {ot:[book, chapter], nt:[book, chapter]}
+// older versions kept [book, chapter] of the New Testament, then [testament, book, chapter]
+let pos=store.get("slowo.pos",null);
+if(Array.isArray(pos))pos=pos.length===3?{[pos[0]]:[pos[1],pos[2]]}:{nt:pos};
+if(!pos||typeof pos!=="object")pos={};
+["ot","nt"].forEach(t=>{const q=pos[t],C=TS[t].c;if(!Array.isArray(q)||!C[q[0]]||!(q[1]>=1&&q[1]<=C[q[0]].length))pos[t]=[0,1]});
 let query="",view="dzis";
 let cloud=null,cloudState="local",saveTimer=null,saving=Promise.resolve();
 function persist(){
@@ -770,26 +814,24 @@ function pickTheme(k,label){
 }
 
 /* ---------- Bible reader: Old and New Testament ---------- */
+// each testament has its own tab, with its own place, list of books and search
+const readerT=()=>view==="st"?"ot":view==="nt"?"nt":null;
 function fillBooks(){
+  const t=readerT();if(!t)return;
   const s=$("book");s.textContent="";
-  ["ot","nt"].forEach(t=>{
-    const g=document.createElement("optgroup");g.label=TNAME[t];
-    TS[t].n[main].forEach((n,i)=>{const o=el("option",null,n);o.value=t+":"+i;g.append(o)});
-    s.append(g);
-  });
-  s.value=pos[0]+":"+pos[1];
+  TS[t].n[main].forEach((n,i)=>{const o=el("option",null,n);o.value=i;s.append(o)});s.value=pos[t][0];
   fillChapters();
 }
 function fillChapters(){
-  const s=$("chapter");s.textContent="";
-  TS[pos[0]].c[pos[1]].forEach((_,i)=>{const o=el("option",null,String(i+1));o.value=i+1;s.append(o)});s.value=pos[2];
+  const t=readerT(),s=$("chapter");s.textContent="";
+  TS[t].c[pos[t][0]].forEach((_,i)=>{const o=el("option",null,String(i+1));o.value=i+1;s.append(o)});s.value=pos[t][1];
 }
-function go(t,b,c){pos=[t,b,c];store.set("slowo.pos",pos);query="";$("q").value="";$("book").value=t+":"+b;fillChapters();renderReader()}
+function go(b,c){pos[readerT()]=[b,c];store.set("slowo.pos",pos);query="";$("q").value="";$("book").value=b;fillChapters();renderReader()}
 function step(d){
-  let [t,b,c]=pos;c+=d;
-  if(c<1){if(b>0)b--;else if(t==="nt"){t="ot";b=OTC.length-1}else return;c=TS[t].c[b].length}
-  else if(c>TS[t].c[b].length){if(b<TS[t].c.length-1)b++;else if(t==="ot"){t="nt";b=0}else return;c=1}
-  go(t,b,c);
+  const C=TS[readerT()].c;let [b,c]=pos[readerT()];c+=d;
+  if(c<1){if(b===0)return;b--;c=C[b].length}
+  else if(c>C[b].length){if(b===C.length-1)return;b++;c=1}
+  go(b,c);
 }
 function verseButton(t,b,c,v,text,withRef){
   const key=t+"|"+b+"|"+c+"|"+v,x=el("button","v");x.type="button";x.lang=main;
@@ -800,26 +842,21 @@ function verseButton(t,b,c,v,text,withRef){
   return x;
 }
 function renderReader(){
-  if(view!=="nt")return;
+  const t=readerT();if(!t)return;
   const box=$("reader"),st=$("nt-status");box.textContent="";
-  $("clear").hidden=!query;
-  const need=query?["ot","nt"]:[pos[0]];      // a search covers the whole Bible, a chapter needs one testament
-  if(need.map(t=>ensure(t,main)).includes(false)){
-    st.textContent=need.some(t=>loading[t+"-"+main]==="error")?"Nie udało się wczytać tego przekładu. Sprawdź połączenie i odśwież stronę.":"Wczytuję przekład…";return;
-  }
+  $("reader-title").textContent=TNAME[t];$("clear").hidden=!query;
+  if(!ensure(t,main)){st.textContent=loading[t+"-"+main]==="error"?"Nie udało się wczytać tego przekładu. Sprawdź połączenie i odśwież stronę.":"Wczytuję przekład…";return}
+  const d=window[TS[t].g][main],where=t==="ot"?"Starym Testamencie":"Nowym Testamencie";
   if(query){
     const q=norm(query),hits=[];let total=0;
-    need.forEach(t=>{
-      const d=window[TS[t].g][main];
-      for(let b=0;b<d.length;b++)for(let c=0;c<d[b].length;c++)for(let v=0;v<d[b][c].length;v++){
-        if(d[b][c][v]&&norm(d[b][c][v]).includes(q)){total++;if(hits.length<60)hits.push([t,b,c+1,v+1,d[b][c][v]])}
-      }
-    });
-    st.textContent=total?("Znaleziono "+total+" wersetów ze słowem „"+query+"”"+(total>60?", pokazuję pierwsze 60.":".")+" Dotknij wersetu, żeby go zapisać."):("Nie znalazłem „"+query+"” w przekładzie "+TR[main]+". Szukam w języku głównym, więc wpisz słowo w tym języku.");
-    hits.forEach(h=>box.append(verseButton(h[0],h[1],h[2],h[3],h[4],true)));
+    for(let b=0;b<d.length;b++)for(let c=0;c<d[b].length;c++)for(let v=0;v<d[b][c].length;v++){
+      if(d[b][c][v]&&norm(d[b][c][v]).includes(q)){total++;if(hits.length<60)hits.push([b,c+1,v+1,d[b][c][v]])}
+    }
+    st.textContent=total?("W "+where+" znaleziono "+total+" wersetów ze słowem „"+query+"”"+(total>60?", pokazuję pierwsze 60.":".")+" Dotknij wersetu, żeby go zapisać."):("Nie znalazłem „"+query+"” w "+where+" w przekładzie "+TR[main]+". Szukam w języku głównym, więc wpisz słowo w tym języku.");
+    hits.forEach(h=>box.append(verseButton(t,h[0],h[1],h[2],h[3],true)));
     return;
   }
-  const [t,b,c]=pos,ch=window[TS[t].g][main][b][c-1]||[];
+  const [b,c]=pos[t],ch=d[b][c-1]||[];
   st.textContent=TS[t].n[main][b]+" "+c+" · "+TR[main]+(ch.length?". Dotknij wersetu, żeby go zapisać.":". Tego rozdziału nie ma w tym przekładzie.");
   ch.forEach((x,i)=>box.append(verseButton(t,b,c,i+1,x,false)));
 }
@@ -890,10 +927,15 @@ async function loadAdmin(){
 }
 
 /* ---------- wiring ---------- */
-const VIEWS=["dzis","modlitwa","sytuacja","nt","zapisane","konto"];
+const VIEWS=["dzis","modlitwa","sytuacja","st","nt","zapisane","konto"];
+const sectionOf=n=>n==="st"?"nt":n;      // both testaments are read in the same section
 function route(){
   const h=location.hash.slice(1),was=view;view=VIEWS.includes(h)?h:"dzis";
-  VIEWS.forEach(n=>{$("view-"+n).hidden=n!==view;if(n===view)$("tab-"+n).setAttribute("aria-current","page");else $("tab-"+n).removeAttribute("aria-current")});
+  VIEWS.forEach(n=>{
+    if(sectionOf(n)===n)$("view-"+n).hidden=n!==sectionOf(view);
+    if(n===view)$("tab-"+n).setAttribute("aria-current","page");else $("tab-"+n).removeAttribute("aria-current");
+  });
+  if(readerT()){if(was!==view){query="";$("q").value=""}fillBooks()}
   if(view==="modlitwa"&&(was!=="modlitwa"||prayerIdx===null))nextPrayer();
   deleteArmed=false;adminArmed=null;
   renderChat(false);renderReader();renderSaved();renderAccount();loadAdmin();
@@ -903,9 +945,9 @@ $("form").addEventListener("submit",ev=>{ev.preventDefault();send($("situation")
 $("situation").addEventListener("keydown",ev=>{if(ev.key==="Enter"&&(ev.ctrlKey||ev.metaKey)){ev.preventDefault();send($("situation").value)}});
 $("chat-new").addEventListener("click",()=>{chatReset();renderChat(false)});
 $("searchform").addEventListener("submit",ev=>{ev.preventDefault();const q=$("q").value.trim();query=q.length>=3?q:"";if(q&&!query)$("nt-status").textContent="Wpisz co najmniej 3 litery.";else renderReader()});
-$("clear").addEventListener("click",()=>go(pos[0],pos[1],pos[2]));
-$("book").addEventListener("change",()=>{const [t,b]=$("book").value.split(":");go(t,Number(b),1)});
-$("chapter").addEventListener("change",()=>go(pos[0],pos[1],Number($("chapter").value)));
+$("clear").addEventListener("click",()=>go(pos[readerT()][0],pos[readerT()][1]));
+$("book").addEventListener("change",()=>go(Number($("book").value),1));
+$("chapter").addEventListener("change",()=>go(pos[readerT()][0],Number($("chapter").value)));
 $("prev").addEventListener("click",()=>step(-1));
 $("next").addEventListener("click",()=>step(1));
 $("src-sel").addEventListener("click",()=>{src="sel";persist();renderAll()});
