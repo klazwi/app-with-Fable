@@ -231,10 +231,10 @@ footer p{margin:0 0 6px}
   </section>
 
   <section id="view-sytuacja" hidden>
-    <h2>Porozmawiajmy o tym, co się u ciebie dzieje</h2>
+    <h2 id="chat-title">Porozmawiajmy o tym, co się u ciebie dzieje</h2>
     <div class="chat" id="chat" aria-live="polite"></div>
     <form class="form" id="form">
-      <label class="sr" for="situation">Twoja wiadomość</label>
+      <label class="sr" for="situation" id="situation-label">Twoja wiadomość</label>
       <textarea id="situation" placeholder="Na przykład: jutro mam ważną rozmowę i od rana nie mogę się uspokoić."></textarea>
       <div class="row">
         <button class="btn" id="find" type="submit">Wyślij</button>
@@ -242,7 +242,7 @@ footer p{margin:0 0 6px}
       </div>
       <p class="hint" id="mode"></p>
     </form>
-    <div class="row" id="themes" role="group" aria-label="Tematy"><span class="label">Temat</span></div>
+    <div class="row" id="themes" role="group" aria-label="Tematy"></div>
   </section>
 
   <section id="view-nt" hidden>
@@ -383,7 +383,8 @@ function itemOf(k){
   return m&&validRef(m[1],+m[2],+m[3],+m[4])?bibItem(m[1],+m[2],+m[3],+m[4]):null;
 }
 const validKey=k=>typeof k==="string"&&!!itemOf(k);
-function shown(t){return t===undefined?"Wczytuję przekład…":t===null?"Nie udało się wczytać tego przekładu.":t===""?"Tego wersetu nie ma w tym przekładzie.":t}
+// l: interface language for the three notices; without it they stay Polish like the rest of the app
+function shown(t,l){const u=UI[l]||UI.pl;return t===undefined?u.loading:t===null?u.failed:t===""?u.absent:t}
 
 /* ---------- state (kept per account, or under "guest") ---------- */
 let ns="guest";
@@ -409,8 +410,8 @@ function persist(){
     saving=saving.then(()=>target.set(body)).then(()=>{if(cloud===target&&cloudState!=="synced"){cloudState="synced";renderAccount()}}).catch(()=>{if(cloud===target){cloudState="error";renderAccount()}})},700);
 }
 function toggleFav(key){favs=favs.includes(key)?favs.filter(x=>x!==key):[key].concat(favs);persist();renderAll()}
-function paintSave(b,key){const on=favs.includes(key);b.textContent=on?"Usuń z zapisanych":"Zapisz";b.setAttribute("aria-pressed",String(on))}
-function saveButton(key){const b=el("button","btn ghost");b.type="button";paintSave(b,key);b.onclick=()=>toggleFav(key);return b}
+function paintSave(b,key,l){const on=favs.includes(key),u=UI[l]||UI.pl;b.textContent=on?u.unsave:u.save;b.setAttribute("aria-pressed",String(on))}
+function saveButton(key,l){const b=el("button","btn ghost");b.type="button";paintSave(b,key,l);b.onclick=()=>toggleFav(key);return b}
 
 /* ---------- accounts: sign-in, registration ---------- */
 // Served by server.py: accounts, sessions and saved verses live in the server database, behind /api.
@@ -609,11 +610,11 @@ function bibOfDay(t,d){
   return bibItem(t,0,1,1);
 }
 function todayItem(d){return src==="sel"?curItem(verseOfDay(d)):bibOfDay(src,d)}
-function fillVerse(fig,item,l,withSave){
+function fillVerse(fig,item,l,withSave,ul){   // ul: interface language for the notices and the save button
   fig.textContent="";
-  const q=el("blockquote",null,shown(item.text(l)));q.lang=item.lang||l;
+  const q=el("blockquote",null,shown(item.text(l),ul));q.lang=item.lang||l;
   const cap=el("figcaption");cap.append(el("span","ref",item.ref(l)));if(!item.lang)cap.append(el("span","tr",TR[l]));
-  if(withSave)cap.append(saveButton(item.key));
+  if(withSave)cap.append(saveButton(item.key,ul));
   fig.append(q,cap);
 }
 let renderedDay=null;
@@ -692,32 +693,53 @@ function localMatch(text){
 }
 function byTheme(k){return shuffle(V.filter(e=>e.th.includes(k))).slice(0,3).map(keyOf)}
 function isCrisis(text){const t=norm(text);return CRISIS.some(w=>t.includes(w))}
-function verseCard(key,withSave){
-  const item=itemOf(key),f=el("figure","verse");fillVerse(f,item,main,withSave);
-  extra.filter(l=>l!==main).forEach(l=>{const t=item.text(l);if(t){const p=el("p","second",t);p.lang=l;f.append(p)}});
+// solo: only the main language, with the card's own labels in it too (used by the conversation view)
+function verseCard(key,withSave,solo){
+  const item=itemOf(key),f=el("figure","verse");fillVerse(f,item,main,withSave,solo?main:undefined);
+  if(!solo)extra.filter(l=>l!==main).forEach(l=>{const t=item.text(l);if(t){const p=el("p","second",t);p.lang=l;f.append(p)}});
   return f;
 }
-const GREETING="Opowiedz, co się u ciebie dzieje. Posłucham, dopytam i poszukam słów z Biblii, które mogą pomóc.";
-const CRISIS_NOTE="Brzmi to bardzo poważnie. Nie zostawaj z tym sam. Zadzwoń pod 116 123 (telefon zaufania dla dorosłych w kryzysie, Polska) albo pod 112, jeśli grozi ci niebezpieczeństwo, i powiedz komuś bliskiemu, co się dzieje.";
-let chat=[],busy=false;   // {role:"user"|"bot", text, keys, raw, crisis}
+// everything the conversation view says, in each language of the app; themes follow the order of THEMES
+const UI={
+  pl:{"title":"Porozmawiajmy o tym, co się u ciebie dzieje","greeting":"Opowiedz, co się u ciebie dzieje. Posłucham, dopytam i poszukam słów z Biblii, które mogą pomóc.","crisis":"Brzmi to bardzo poważnie. Nie zostawaj z tym sam. Zadzwoń pod 116 123 (telefon zaufania dla dorosłych w kryzysie, Polska) albo pod 112, jeśli grozi ci niebezpieczeństwo, i powiedz komuś bliskiemu, co się dzieje.","writing":"Piszę…","label":"Twoja wiadomość","placeholder":"Na przykład: jutro mam ważną rozmowę i od rana nie mogę się uspokoić.","send":"Wyślij","fresh":"Nowa rozmowa","modeAi":"Rozmawiasz z Claude. Wiadomości są wysyłane tylko po to, żeby odpowiedzieć, a rozmowa nie jest zapisywana. To program, a nie duszpasterz ani terapeuta.","modeLocal":"Tryb bez Claude: dopasowuję wersety po słowach kluczowych, bez wysyłania wiadomości. Rozmowa nie jest zapisywana.","topic":"Temat","topics":"Tematy","matched":"Dziękuję, że o tym piszesz. Te słowa mogą pasować do tego, co opisujesz. Jeśli chcesz, napisz więcej, a poszukam dalej.","unknown":"Nie rozpoznałem tematu w tej wiadomości. Opisz to innymi słowami albo wybierz temat poniżej.","themeReply":"Oto wersety na ten temat. Jeśli chcesz, opowiedz, co się dzieje, a poszukam czegoś bliższego twojej sytuacji.","save":"Zapisz","unsave":"Usuń z zapisanych","loading":"Wczytuję przekład…","failed":"Nie udało się wczytać tego przekładu.","absent":"Tego wersetu nie ma w tym przekładzie.","themes":["Lęk i stres","Smutek","Samotność","Zmęczenie","Decyzje","Przyszłość","Praca i nauka","Pieniądze","Konflikt","Poczucie winy","Choroba","Zwątpienie","Miłość i bliscy","Nadzieja","Odwaga","Cierpliwość","Pokusa","Spokój","Wdzięczność"]},
+  en:{"title":"Let's talk about what is going on with you","greeting":"Tell me what is going on. I will listen, ask questions and look for words from the Bible that may help.","crisis":"This sounds very serious. Don't stay alone with it. Call 116 123 (helpline for adults in crisis, Poland) or 112 if you are in danger, or the emergency number of the country you are in, and tell someone close to you what is happening.","writing":"Writing…","label":"Your message","placeholder":"For example: I have an important meeting tomorrow and I have not been able to calm down since morning.","send":"Send","fresh":"New conversation","modeAi":"You are talking with Claude. Messages are sent only to get a reply, and the conversation is not saved. This is a program, not a pastor or a therapist.","modeLocal":"Mode without Claude: I match verses by keywords, without sending your messages anywhere. The conversation is not saved.","topic":"Topic","topics":"Topics","matched":"Thank you for writing about this. These words may fit what you describe. If you like, write more and I will keep looking.","unknown":"I did not recognise a topic in this message. Describe it in other words or choose a topic below.","themeReply":"Here are verses on this topic. If you like, tell me what is going on and I will look for something closer to your situation.","save":"Save","unsave":"Remove from saved","loading":"Loading the translation…","failed":"This translation could not be loaded.","absent":"This verse is not in this translation.","themes":["Fear and stress","Sadness","Loneliness","Tiredness","Decisions","The future","Work and study","Money","Conflict","Guilt","Illness","Doubt","Love and family","Hope","Courage","Patience","Temptation","Peace","Gratitude"]},
+  es:{"title":"Hablemos de lo que te está pasando","greeting":"Cuéntame qué te está pasando. Te escucharé, te haré preguntas y buscaré palabras de la Biblia que puedan ayudarte.","crisis":"Esto suena muy serio. No te quedes solo con ello. Llama al 116 123 (teléfono de ayuda para adultos en crisis, Polonia) o al 112 si estás en peligro, o al número de emergencias del país donde estás, y cuéntale a alguien cercano lo que está pasando.","writing":"Escribiendo…","label":"Tu mensaje","placeholder":"Por ejemplo: mañana tengo una reunión importante y desde la mañana no consigo calmarme.","send":"Enviar","fresh":"Nueva conversación","modeAi":"Estás hablando con Claude. Los mensajes se envían solo para poder responder y la conversación no se guarda. Esto es un programa, no un sacerdote ni un terapeuta.","modeLocal":"Modo sin Claude: busco versículos por palabras clave, sin enviar tus mensajes. La conversación no se guarda.","topic":"Tema","topics":"Temas","matched":"Gracias por escribir sobre esto. Estas palabras pueden encajar con lo que describes. Si quieres, escribe más y seguiré buscando.","unknown":"No he reconocido ningún tema en este mensaje. Descríbelo con otras palabras o elige un tema abajo.","themeReply":"Aquí tienes versículos sobre este tema. Si quieres, cuéntame qué te pasa y buscaré algo más cercano a tu situación.","save":"Guardar","unsave":"Quitar de guardados","loading":"Cargando la traducción…","failed":"No se ha podido cargar esta traducción.","absent":"Este versículo no está en esta traducción.","themes":["Miedo y estrés","Tristeza","Soledad","Cansancio","Decisiones","El futuro","Trabajo y estudios","Dinero","Conflicto","Culpa","Enfermedad","Dudas","Amor y familia","Esperanza","Valentía","Paciencia","Tentación","Paz","Gratitud"]},
+  de:{"title":"Sprechen wir darüber, was bei dir los ist","greeting":"Erzähl mir, was bei dir los ist. Ich höre zu, frage nach und suche Worte aus der Bibel, die helfen können.","crisis":"Das klingt sehr ernst. Bleib damit nicht allein. Ruf die 116 123 an (Krisentelefon für Erwachsene, Polen) oder die 112, wenn du in Gefahr bist, oder die Notrufnummer des Landes, in dem du bist, und erzähl jemandem, der dir nahesteht, was los ist.","writing":"Ich schreibe…","label":"Deine Nachricht","placeholder":"Zum Beispiel: Morgen habe ich ein wichtiges Gespräch und kann mich seit dem Morgen nicht beruhigen.","send":"Senden","fresh":"Neues Gespräch","modeAi":"Du sprichst mit Claude. Nachrichten werden nur gesendet, um zu antworten, und das Gespräch wird nicht gespeichert. Das ist ein Programm, kein Seelsorger und kein Therapeut.","modeLocal":"Modus ohne Claude: Ich suche Verse nach Stichwörtern, ohne deine Nachrichten zu versenden. Das Gespräch wird nicht gespeichert.","topic":"Thema","topics":"Themen","matched":"Danke, dass du darüber schreibst. Diese Worte könnten zu dem passen, was du beschreibst. Wenn du magst, schreib mehr, dann suche ich weiter.","unknown":"Ich habe in dieser Nachricht kein Thema erkannt. Beschreib es mit anderen Worten oder wähle unten ein Thema.","themeReply":"Hier sind Verse zu diesem Thema. Wenn du magst, erzähl, was los ist, dann suche ich etwas, das näher an deiner Situation ist.","save":"Speichern","unsave":"Aus Gespeicherten entfernen","loading":"Übersetzung wird geladen…","failed":"Diese Übersetzung konnte nicht geladen werden.","absent":"Diesen Vers gibt es in dieser Übersetzung nicht.","themes":["Angst und Stress","Traurigkeit","Einsamkeit","Müdigkeit","Entscheidungen","Zukunft","Arbeit und Lernen","Geld","Konflikt","Schuldgefühle","Krankheit","Zweifel","Liebe und Familie","Hoffnung","Mut","Geduld","Versuchung","Ruhe","Dankbarkeit"]},
+  fr:{"title":"Parlons de ce qui se passe dans ta vie","greeting":"Raconte-moi ce qui se passe. Je t'écouterai, je poserai des questions et je chercherai des paroles de la Bible qui peuvent aider.","crisis":"Cela semble très grave. Ne reste pas seul avec ça. Appelle le 116 123 (ligne d'écoute pour adultes en crise, Pologne) ou le 112 si tu es en danger, ou le numéro d'urgence du pays où tu te trouves, et dis à un proche ce qui se passe.","writing":"J'écris…","label":"Ton message","placeholder":"Par exemple : demain j'ai un entretien important et depuis ce matin je n'arrive pas à me calmer.","send":"Envoyer","fresh":"Nouvelle conversation","modeAi":"Tu parles avec Claude. Les messages sont envoyés uniquement pour pouvoir répondre et la conversation n'est pas enregistrée. C'est un programme, pas un prêtre ni un thérapeute.","modeLocal":"Mode sans Claude : je cherche des versets par mots-clés, sans envoyer tes messages. La conversation n'est pas enregistrée.","topic":"Thème","topics":"Thèmes","matched":"Merci d'en parler. Ces paroles peuvent correspondre à ce que tu décris. Si tu veux, écris-en plus et je continuerai à chercher.","unknown":"Je n'ai pas reconnu de thème dans ce message. Décris-le autrement ou choisis un thème ci-dessous.","themeReply":"Voici des versets sur ce thème. Si tu veux, raconte ce qui se passe et je chercherai quelque chose de plus proche de ta situation.","save":"Enregistrer","unsave":"Retirer des enregistrés","loading":"Chargement de la traduction…","failed":"Impossible de charger cette traduction.","absent":"Ce verset n'existe pas dans cette traduction.","themes":["Peur et stress","Tristesse","Solitude","Fatigue","Décisions","L'avenir","Travail et études","Argent","Conflit","Culpabilité","Maladie","Doute","Amour et proches","Espérance","Courage","Patience","Tentation","Paix","Gratitude"]},
+  it:{"title":"Parliamo di quello che ti sta succedendo","greeting":"Raccontami che cosa ti sta succedendo. Ti ascolterò, ti farò qualche domanda e cercherò parole della Bibbia che possano aiutarti.","crisis":"Sembra una cosa molto seria. Non restare solo con questo peso. Chiama il 116 123 (linea di ascolto per adulti in crisi, Polonia) o il 112 se sei in pericolo, oppure il numero di emergenza del paese in cui ti trovi, e racconta a una persona vicina che cosa sta succedendo.","writing":"Sto scrivendo…","label":"Il tuo messaggio","placeholder":"Per esempio: domani ho un colloquio importante e da stamattina non riesco a calmarmi.","send":"Invia","fresh":"Nuova conversazione","modeAi":"Stai parlando con Claude. I messaggi vengono inviati solo per poter rispondere e la conversazione non viene salvata. È un programma, non un sacerdote né un terapeuta.","modeLocal":"Modalità senza Claude: cerco i versetti per parole chiave, senza inviare i tuoi messaggi. La conversazione non viene salvata.","topic":"Tema","topics":"Temi","matched":"Grazie di averne parlato. Queste parole possono corrispondere a ciò che descrivi. Se vuoi, scrivi di più e continuerò a cercare.","unknown":"Non ho riconosciuto un tema in questo messaggio. Descrivilo con altre parole oppure scegli un tema qui sotto.","themeReply":"Ecco alcuni versetti su questo tema. Se vuoi, raccontami che cosa succede e cercherò qualcosa di più vicino alla tua situazione.","save":"Salva","unsave":"Rimuovi dai salvati","loading":"Carico la traduzione…","failed":"Non è stato possibile caricare questa traduzione.","absent":"Questo versetto non c'è in questa traduzione.","themes":["Paura e stress","Tristezza","Solitudine","Stanchezza","Decisioni","Il futuro","Lavoro e studio","Denaro","Conflitto","Senso di colpa","Malattia","Dubbio","Amore e famiglia","Speranza","Coraggio","Pazienza","Tentazione","Pace","Gratitudine"]},
+  sv:{"title":"Låt oss prata om vad som händer i ditt liv","greeting":"Berätta vad som händer. Jag lyssnar, ställer frågor och letar efter ord ur Bibeln som kan hjälpa.","crisis":"Det här låter mycket allvarligt. Var inte ensam med det. Ring 116 123 (stödlinje för vuxna i kris, Polen) eller 112 om du är i fara, eller nödnumret i landet där du befinner dig, och berätta för någon som står dig nära vad som händer.","writing":"Jag skriver…","label":"Ditt meddelande","placeholder":"Till exempel: i morgon har jag ett viktigt möte och jag har inte kunnat lugna ner mig sedan i morse.","send":"Skicka","fresh":"Nytt samtal","modeAi":"Du pratar med Claude. Meddelanden skickas bara för att kunna svara och samtalet sparas inte. Det här är ett program, inte en präst eller terapeut.","modeLocal":"Läge utan Claude: jag letar verser efter nyckelord, utan att skicka dina meddelanden. Samtalet sparas inte.","topic":"Ämne","topics":"Ämnen","matched":"Tack för att du skriver om det här. De här orden kan passa det du beskriver. Skriv gärna mer, så letar jag vidare.","unknown":"Jag kände inte igen något ämne i meddelandet. Beskriv det med andra ord eller välj ett ämne nedan.","themeReply":"Här är verser om det här ämnet. Berätta gärna vad som händer, så letar jag efter något som ligger närmare din situation.","save":"Spara","unsave":"Ta bort från sparade","loading":"Läser in översättningen…","failed":"Det gick inte att läsa in översättningen.","absent":"Den här versen finns inte i den här översättningen.","themes":["Rädsla och stress","Sorg","Ensamhet","Trötthet","Beslut","Framtiden","Arbete och studier","Pengar","Konflikt","Skuld","Sjukdom","Tvivel","Kärlek och närstående","Hopp","Mod","Tålamod","Frestelse","Frid","Tacksamhet"]}
+};
+const ui=k=>(UI[main]||UI.pl)[k];
+const themeName=k=>ui("themes")[THEMES.findIndex(x=>x[0]===k)];
+// canned messages keep a key instead of text, so they follow the language when it changes mid-conversation
+const msgText=m=>m.theme?ui("topic")+": "+themeName(m.theme):m.tk?ui(m.tk):m.text;
+let chat=[],busy=false;   // {role:"user"|"bot", text | tk | theme, keys, raw, crisis}
 function chatReset(){chat=[];busy=false}
+function paintChatLabels(){
+  $("view-sytuacja").lang=main;
+  $("chat-title").textContent=ui("title");$("situation-label").textContent=ui("label");$("situation").placeholder=ui("placeholder");
+  $("find").textContent=ui("send");$("chat-new").textContent=ui("fresh");setMode();
+  const box=$("themes");box.textContent="";box.setAttribute("aria-label",ui("topics"));box.append(el("span","label",ui("topic")));
+  THEMES.forEach(([k])=>{const b=el("button","chip",themeName(k));b.type="button";b.onclick=()=>pickTheme(k);box.append(b)});
+}
 function renderChat(scroll){
   if(view!=="sytuacja")return;
+  paintChatLabels();
   const box=$("chat");box.textContent="";
-  box.append(el("div","msg bot",GREETING));
+  box.append(el("div","msg bot",ui("greeting")));
   chat.forEach(m=>{
-    if(m.crisis)box.append(el("p","note",CRISIS_NOTE));
-    box.append(el("div","msg "+(m.role==="user"?"user":"bot"),m.text));
-    (m.keys||[]).forEach(k=>{if(itemOf(k))box.append(verseCard(k,true))});
+    if(m.crisis)box.append(el("p","note",ui("crisis")));
+    box.append(el("div","msg "+(m.role==="user"?"user":"bot"),msgText(m)));
+    (m.keys||[]).forEach(k=>{if(itemOf(k))box.append(verseCard(k,true,true))});
   });
-  if(busy)box.append(el("div","msg bot wait","Piszę…"));
+  if(busy)box.append(el("div","msg bot wait",ui("writing")));
   $("find").disabled=busy;
   if(scroll&&box.lastElementChild&&box.lastElementChild.scrollIntoView)box.lastElementChild.scrollIntoView({block:"nearest"});
 }
-function setMode(){$("mode").textContent=sample?"Rozmawiasz z Claude. Wiadomości są wysyłane tylko po to, żeby odpowiedzieć, a rozmowa nie jest zapisywana. To program, a nie duszpasterz ani terapeuta.":"Tryb bez Claude: dopasowuję wersety po słowach kluczowych, bez wysyłania wiadomości. Rozmowa nie jest zapisywana."}
+function setMode(){$("mode").textContent=ui(sample?"modeAi":"modeLocal")}
 const SYS="Jesteś życzliwym rozmówcą w aplikacji „Słowo na dziś”. Rozmawiasz z osobą o tym, co przeżywa, i podsuwasz wersety z Biblii, które mogą jej pomóc.\n"+
 "Zasady:\n"+
-"- Odpowiadaj w języku użytkownika (domyślnie po polsku), ciepło, na ty, zwykle w 2–5 zdaniach. Najpierw pokaż, że rozumiesz, co napisał. Możesz zadać jedno pytanie, żeby lepiej zrozumieć sytuację.\n"+
+"- Odpowiadaj wyłącznie w języku wybranym w aplikacji (podanym niżej jako JĘZYK), ciepło, na ty, zwykle w 2–5 zdaniach. Najpierw pokaż, że rozumiesz, co napisał. Możesz zadać jedno pytanie, żeby lepiej zrozumieć sytuację.\n"+
 "- Nie moralizuj, nie oceniaj, nie składaj obietnic i nie stawiaj diagnoz. Jesteś programem, a nie duchownym, lekarzem ani terapeutą; zapytany, mów to wprost. Przy poważnych sprawach zachęcaj do rozmowy z bliskimi, duszpasterzem albo specjalistą.\n"+
 "- Dołączaj 1–2 wersety, gdy pasują do tego, co ktoś napisał; w pierwszej odpowiedzi zawsze co najmniej jeden. Nie przepisuj treści wersetów w polu reply: aplikacja sama pokaże je pod twoją odpowiedzią. Możesz krótko powiedzieć, dlaczego je wybrałeś.\n"+
 "- Werset wskazujesz jako {\"b\":\"nazwa księgi\",\"c\":rozdział,\"v\":werset} dla dowolnego miejsca Nowego Testamentu (numeracja King James Version, nazwa księgi dokładnie z listy KSIĘGI) albo jako {\"id\":numer} dla pozycji z LISTY (są tam też wersety ze Starego Testamentu). Wybieraj wersety zrozumiałe bez kontekstu i nie powtarzaj tych, które już padły w rozmowie.\n"+
@@ -728,8 +750,8 @@ const SYS="Jesteś życzliwym rozmówcą w aplikacji „Słowo na dziś”. Rozm
 function buildInput(){
   let msgs=chat.slice(-16);while(msgs.length&&msgs[0].role!=="user")msgs=msgs.slice(1);
   return msgs.map((m,i)=>m.role==="user"
-    ?{role:"user",content:(i===0?SYS+"\n\nWIADOMOŚĆ UŻYTKOWNIKA:\n":"")+m.text.slice(0,2000)}
-    :{role:"assistant",content:m.raw||JSON.stringify({reply:m.text,picks:[]})});
+    ?{role:"user",content:(i===0?SYS+"\n\nJĘZYK: "+LANGS[main]+"\n\nWIADOMOŚĆ UŻYTKOWNIKA:\n":"")+msgText(m).slice(0,2000)}
+    :{role:"assistant",content:m.raw||JSON.stringify({reply:msgText(m),picks:m.picks||[]})});
 }
 async function askClaude(){
   const r=await sample.json(buildInput(),{modelTier:"default",cache:false});
@@ -747,8 +769,7 @@ async function askClaude(){
 }
 function localReply(text){
   const keys=localMatch(text);
-  return keys?{text:"Dziękuję, że o tym piszesz. Te słowa mogą pasować do tego, co opisujesz. Jeśli chcesz, napisz więcej, a poszukam dalej.",keys}
-    :{text:"Nie rozpoznałem tematu w tej wiadomości. Opisz to innymi słowami albo wybierz temat poniżej.",keys:[]};
+  return keys?{tk:"matched",keys}:{tk:"unknown",keys:[]};
 }
 async function send(text){
   text=String(text||"").trim();
@@ -761,11 +782,11 @@ async function send(text){
   if(!reply)reply=localReply(text);
   busy=false;chat.push(Object.assign({role:"bot",crisis},reply));renderChat(true);
 }
-function pickTheme(k,label){
+function pickTheme(k){
   if(busy)return;
-  const keys=byTheme(k),text="Oto wersety na ten temat. Jeśli chcesz, opowiedz, co się dzieje, a poszukam czegoś bliższego twojej sytuacji.";
-  chat.push({role:"user",text:"Temat: "+label});
-  chat.push({role:"bot",text,keys,raw:JSON.stringify({reply:text,picks:keys.map(x=>({id:KEYIDX[x]}))})});
+  const keys=byTheme(k);
+  chat.push({role:"user",theme:k});
+  chat.push({role:"bot",tk:"themeReply",keys,picks:keys.map(x=>({id:KEYIDX[x]}))});
   renderChat(true);
 }
 
@@ -898,7 +919,6 @@ function route(){
   deleteArmed=false;adminArmed=null;
   renderChat(false);renderReader();renderSaved();renderAccount();loadAdmin();
 }
-THEMES.forEach(([k,label])=>{const b=el("button","chip",label);b.type="button";b.onclick=()=>pickTheme(k,label);$("themes").append(b)});
 $("form").addEventListener("submit",ev=>{ev.preventDefault();send($("situation").value)});
 $("situation").addEventListener("keydown",ev=>{if(ev.key==="Enter"&&(ev.ctrlKey||ev.metaKey)){ev.preventDefault();send($("situation").value)}});
 $("chat-new").addEventListener("click",()=>{chatReset();renderChat(false)});
