@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Słowo na dziś</title>
+<script>try{var t=JSON.parse(localStorage.getItem("slowo.theme"));if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&display=swap" rel="stylesheet">
@@ -168,6 +169,10 @@ pre{margin:0;padding:12px 14px;background:var(--surface);border:1px solid var(--
 @media (min-width:900px){#app>nav .label{display:block}}
 footer{color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:16px}
 footer p{margin:0 0 6px}
+.themebar{display:flex;justify-content:center;padding-top:14px}
+.iconbtn{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.iconbtn:hover{border-color:var(--muted)}
+.iconbtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .6s ease}.switch .track::after{transition:left .15s ease}}
 </style>
 </head>
@@ -332,6 +337,12 @@ footer p{margin:0 0 6px}
   <footer>
     <p>Przekłady z domeny publicznej: Biblia Gdańska (wyd. 1881), King James Version, Reina-Valera 1909, Elberfelder 1905, Crampon 1923, Riveduta (Luzzi), Bibeln 1917. Stąd dawny język. Numeracja wersetów zgodna z danym przekładem, dlatego w kilku miejscach ten sam numer w różnych językach wskazuje sąsiedni werset.</p>
     <p>Cytat dnia zmienia się o północy czasu twojego urządzenia.</p>
+    <div class="themebar">
+      <button class="iconbtn" type="button" id="theme-toggle">
+        <svg id="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.500v2.400M12 19.100v2.400M2.500 12h2.400M19.100 12h2.400M5.300 5.300l1.700 1.700M17 17l1.700 1.700M5.300 18.700l1.700-1.700M17 7l1.700-1.700"/></svg>
+        <svg id="theme-moon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M20.500 14.200A8.500 8.500 0 0 1 9.800 3.500a8.500 8.500 0 1 0 10.700 10.700z"/></svg>
+      </button>
+    </div>
   </footer>
   </div>
 </div>
@@ -995,6 +1006,22 @@ $("auth-guest").addEventListener("click",asGuest);
 $("auth-forgot").addEventListener("click",forgot);
 $("admin-refresh").addEventListener("click",loadAdmin);
 window.addEventListener("hashchange",route);
+
+/* ---------- light and dark theme ---------- */
+// The choice is kept on this device. Until one is made, the app follows the system setting.
+const darkQuery=window.matchMedia?window.matchMedia("(prefers-color-scheme: dark)"):null;
+function themeNow(){const t=document.documentElement.dataset.theme;return t==="light"||t==="dark"?t:darkQuery&&darkQuery.matches?"dark":"light"}
+function paintTheme(){
+  const dark=themeNow()==="dark",label=dark?"Włącz jasny motyw":"Włącz ciemny motyw";
+  $("theme-sun").toggleAttribute("hidden",!dark);$("theme-moon").toggleAttribute("hidden",dark);   // the sun leads to the light theme, the moon to the dark one
+  $("theme-toggle").setAttribute("aria-label",label);$("theme-toggle").title=label;
+}
+$("theme-toggle").addEventListener("click",()=>{
+  const next=themeNow()==="dark"?"light":"dark";
+  document.documentElement.dataset.theme=next;store.set("slowo.theme",next);paintTheme();
+});
+if(darkQuery&&darkQuery.addEventListener)darkQuery.addEventListener("change",paintTheme);
+paintTheme();
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&!$("app").hidden)tick()});
 setInterval(()=>{if(!$("app").hidden)tick()},20000);
 
