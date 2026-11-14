@@ -169,13 +169,15 @@ input[type=search]{flex:1;min-width:140px}
 .status b{margin-right:.45em;font-weight:600;color:var(--ink)}
 @media (min-width:720px){
   body.reading #app>.main{height:100vh;padding-bottom:1.25rem}
-  body.reading #app>.main>footer{display:none}
+  body.reading #app>.main>footer{flex:none}
+  #app>.main>footer{padding-right:5.5rem}      /* keeps the note clear of the robot button */
+  body.chatting #app>.main>footer{padding-right:0}
   body.reading #view-nt{flex:1;min-height:0}
-  .readbox{display:flex;flex-direction:column;flex:1;min-height:16rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
+  .readbox{display:flex;flex-direction:column;flex:1;min-height:12rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
   .readbox .status{flex:none;padding:.7rem 1.1rem;border-bottom:1px solid var(--line);color:var(--ink)}
   .readbox .status b{font-family:var(--font-read);font-weight:500;font-size:1.1rem;margin-right:.5rem}
   .readbox .status span{color:var(--muted);font-size:.9rem}
-  .readbox .reader{flex:1;min-height:0;overflow-y:auto;padding:.6rem .6rem 5rem;scrollbar-width:thin;overscroll-behavior:contain}
+  .readbox .reader{flex:1;min-height:0;overflow-y:auto;padding:.6rem .6rem 1.5rem;scrollbar-width:thin;overscroll-behavior:contain}
   .readbox .v{max-width:none}
   .readbox .v:hover{background:var(--paper)}
 }
