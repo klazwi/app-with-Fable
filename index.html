@@ -37,9 +37,8 @@
 *{box-sizing:border-box}
 html,body{margin:0}
 html{font-size:16px}
-@media (min-width:720px){html{font-size:17px}}
-@media (min-width:1200px){html{font-size:18.5px}}
-@media (min-width:1700px){html{font-size:20px}}
+@media (min-width:1200px){html{font-size:16.5px}}
+@media (min-width:1700px){html{font-size:17.5px}}
 body{background:var(--paper);color:var(--ink);font-family:var(--font-ui);font-size:1rem;line-height:1.5;-webkit-text-size-adjust:100%}
 [hidden]{display:none !important}
 .page{max-width:680px;margin:0 auto;padding:20px 20px 56px;display:flex;flex-direction:column;gap:22px}
@@ -99,7 +98,7 @@ textarea::placeholder,input::placeholder{color:var(--muted)}
 .ref{color:var(--rubric);font-weight:600;font-size:.95rem}
 .tr{color:var(--muted);font-size:.82rem}
 .verse.lead{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:28px 24px 22px}
-.verse.lead blockquote{font-size:clamp(1.3rem,4.6vw,1.75rem);line-height:1.45}
+.verse.lead blockquote{font-size:clamp(1.3rem,4.6vw,1.55rem);line-height:1.5}
 .verse.lead.long blockquote{font-size:clamp(1.08rem,3.6vw,1.25rem);line-height:1.6}
 #today blockquote::first-letter{color:var(--rubric);font-size:3.1em;float:left;line-height:.86;padding:.06em .1em 0 0;font-weight:500}
 .others{display:flex;flex-direction:column}
@@ -185,15 +184,15 @@ pre{margin:0;padding:12px 14px;background:var(--surface);border:1px solid var(--
 #app .brand{padding-right:52px}
 @media (min-width:720px){
   #app{max-width:none;margin:0;padding:0;flex-direction:row;align-items:flex-start;gap:0}
-  #app>.side{display:flex;flex-direction:column;gap:1.1rem;flex:none;width:15.5rem;position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--surface);border-right:1px solid var(--line);padding:1.5rem 1rem 1.25rem 0}
-  #app>.side>.logo{display:block;width:7rem;margin:0 0 0 1.25rem}
+  #app>.side{display:flex;flex-direction:column;gap:1rem;flex:none;width:13.5rem;position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--surface);border-right:1px solid var(--line);padding:1.25rem .85rem 1.25rem 0}
+  #app>.side>.logo{display:block;width:5.25rem;margin:0 0 0 1.1rem}
   #app>.side>nav{order:0;flex-direction:column;gap:4px;border-bottom:0;overflow:visible}
-  #app nav a{white-space:normal;border-bottom:0;margin-bottom:0;border-left:4px solid transparent;border-radius:0 8px 8px 0;padding:.65rem 1rem .65rem 1.25rem;font-size:1.05rem}
+  #app nav a{white-space:normal;border-bottom:0;margin-bottom:0;border-left:4px solid transparent;border-radius:0 8px 8px 0;padding:.5rem .9rem .5rem 1.1rem}
   #app nav a:hover{background:var(--paper)}
   #app nav a[aria-current="page"]{border-left-color:var(--rubric);background:var(--paper)}
-  #app nav .label{display:block;padding:0 1rem .5rem 1.5rem}
-  #app>.side>.iconbtn{position:static;width:3rem;height:3rem;margin-left:1.4rem;flex:none;background:var(--paper)}
-  #app>.main{display:flex;flex-direction:column;gap:22px;flex:1;min-width:0;max-width:62rem;margin:0 auto;padding:1.75rem 2.5rem 3.5rem}
+  #app nav .label{display:block;padding:0 1rem .4rem 1.35rem}
+  #app>.side>.iconbtn{position:static;width:2.6rem;height:2.6rem;margin-left:1.2rem;flex:none;background:var(--paper)}
+  #app>.main{display:flex;flex-direction:column;gap:22px;flex:1;min-width:0;max-width:52rem;margin:0 auto;padding:1.5rem 2rem 3.5rem}
   #app .brand{padding-right:0}
   .mark{display:none}
 }
