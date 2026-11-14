@@ -4,6 +4,8 @@
 Run:  py server.py        (then open http://127.0.0.1:8000)
 Environment: HOST, PORT, SLOWO_DB (database file), SLOWO_SECURE=1 (cookies only over HTTPS),
 TRUST_PROXY=1 (take the client address and scheme from X-Forwarded-* headers).
+Mail for verification codes: SMTP_HOST, SMTP_PORT (587, or 465 for implicit TLS), SMTP_USER,
+SMTP_PASSWORD, SMTP_FROM. Without SMTP_HOST the code is printed to this console instead of being sent.
 Needs only the Python standard library.
 """
 import gzip
@@ -13,9 +15,12 @@ import json
 import os
 import re
 import secrets
+import smtplib
 import sqlite3
+import ssl
 import threading
 import time
+from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
@@ -25,12 +30,22 @@ HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8000"))
 SECURE = os.environ.get("SLOWO_SECURE") == "1"
 TRUST_PROXY = os.environ.get("TRUST_PROXY") == "1"
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "") or SMTP_USER
 
 SESSION_SECONDS = 30 * 24 * 3600
 MAX_BODY = 64 * 1024
+CODE_SECONDS = 15 * 60      # how long a verification code stays valid
+RESEND_SECONDS = 60         # shortest gap between two codes for one registration
+MAX_SENDS = 5               # codes sent per registration
+MAX_TRIES = 5               # wrong codes allowed per code
 LANGS = {"pl", "en", "es", "de", "fr", "it", "sv"}
 SOURCES = {"sel", "nt", "ot"}
 LOGIN_RE = re.compile(r"^[\w.\-]{3,32}$")
+EMAIL_RE = re.compile(r"^[^@\s<>\"',;]{1,64}@[^@\s<>\"',;]{1,190}\.[^@\s<>\"',;.]{2,24}$")
 FAV_RE = re.compile(r"^[A-Za-z ]{2,40}\|\d{1,3}\|\d{1,3}(\|\d{1,3})?$")
 DATA_RE = re.compile(r"^/data/((?:nt|ot)-[a-z]{2}\.js)$")
 SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1}
@@ -52,6 +67,17 @@ CREATE TABLE IF NOT EXISTS accounts(
   created INTEGER NOT NULL,
   last_login INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pending(
+  token_hash TEXT PRIMARY KEY,
+  login TEXT NOT NULL,
+  email TEXT NOT NULL,
+  hash TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  expires INTEGER NOT NULL,
+  last_sent INTEGER NOT NULL,
+  sends INTEGER NOT NULL DEFAULT 1,
+  tries INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS sessions(
   token_hash TEXT PRIMARY KEY,
   account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -65,9 +91,49 @@ CREATE TABLE IF NOT EXISTS state(
 """)
 
 
+if "email" not in [r["name"] for r in db.execute("PRAGMA table_info(accounts)")]:   # databases made before e-mail was required
+    db.execute("ALTER TABLE accounts ADD COLUMN email TEXT")
+db.execute("CREATE UNIQUE INDEX IF NOT EXISTS accounts_email ON accounts(lower(email)) WHERE email IS NOT NULL")
+
+
 def public(row):
-    return {"id": "s%d" % row["id"], "login": row["login"], "role": row["role"],
+    return {"id": "s%d" % row["id"], "login": row["login"], "email": row["email"], "role": row["role"],
             "created": row["created"], "lastLogin": row["last_login"]}
+
+
+sha = lambda text: hashlib.sha256(text.encode("utf-8")).hexdigest()
+new_code = lambda: "%06d" % secrets.randbelow(10 ** 6)
+
+
+def mask(email):
+    name, _, domain = email.partition("@")
+    return name[:1] + "***@" + domain
+
+
+def send_code(email, code):
+    """Sends the verification code. Returns "email", or "console" when no mail server is configured."""
+    if not SMTP_HOST:
+        print("[mail] SMTP_HOST is not set; verification code for %s: %s" % (email, code), flush=True)
+        return "console"
+    msg = EmailMessage()
+    msg["Subject"] = "Słowo na dziś: kod weryfikacyjny %s" % code
+    msg["From"] = SMTP_FROM
+    msg["To"] = email
+    msg.set_content("Twój kod weryfikacyjny do aplikacji Słowo na dziś: %s\n\n"
+                    "Kod jest ważny %d minut. Jeśli to nie ty zakładasz konto, zignoruj tę wiadomość.\n"
+                    % (code, CODE_SECONDS // 60))
+    context = ssl.create_default_context()
+    if SMTP_PORT == 465:
+        smtp = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15, context=context)
+    else:
+        smtp = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
+    with smtp:
+        if SMTP_PORT != 465:
+            smtp.starttls(context=context)
+        if SMTP_USER:
+            smtp.login(SMTP_USER, SMTP_PASSWORD)
+        smtp.send_message(msg)
+    return "email"
 
 
 # ---------- passwords ----------
@@ -302,6 +368,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"ok": True, "account": public(acc) if acc else None})
         if method == "POST" and path == "register":
             return self.register()
+        if method == "POST" and path == "verify":
+            return self.verify()
+        if method == "POST" and path == "resend":
+            return self.resend()
         if method == "POST" and path == "login":
             return self.login()
         if method == "POST" and path == "logout":
@@ -348,14 +418,79 @@ class Handler(BaseHTTPRequestHandler):
         return login.strip(), password
 
     def register(self):
+        """Step one: keeps the registration aside and mails a code. The account is created by verify()."""
         ip = self.client_ip()
         if too_many(("register", ip), 10, 3600):
             raise ApiError(429, "too_many")
-        login, password = self.credentials()
+        data = self.read_json()
+        login, password, email = data.get("login"), data.get("password"), data.get("email")
+        if not all(isinstance(x, str) for x in (login, password, email)):
+            raise ApiError(400, "bad_request")
+        login, email = login.strip(), email.strip()
         if not LOGIN_RE.match(login) or not 8 <= len(password) <= 128:
             raise ApiError(400, "invalid")
+        if len(email) > 254 or not EMAIL_RE.match(email):
+            raise ApiError(400, "invalid_email")
         note(("register", ip))
+        with db_lock:
+            if db.execute("SELECT 1 FROM accounts WHERE login_key=?", (login.casefold(),)).fetchone():
+                raise ApiError(409, "taken")
+            if db.execute("SELECT 1 FROM accounts WHERE lower(email)=lower(?)", (email,)).fetchone():
+                raise ApiError(409, "email_taken")
+        token, code, t = secrets.token_urlsafe(24), new_code(), now_ms()
         hashed = hash_password(password)
+        with db_lock:
+            db.execute("DELETE FROM pending WHERE expires<? OR lower(email)=lower(?)", (t, email))
+            db.execute("INSERT INTO pending(token_hash,login,email,hash,code_hash,expires,last_sent) VALUES(?,?,?,?,?,?,?)",
+                       (sha(token), login, email, hashed, sha(token + code), t + CODE_SECONDS * 1000, t))
+        self.deliver(token, email, code)
+
+    def deliver(self, token, email, code):
+        try:
+            how = send_code(email, code)
+        except (OSError, smtplib.SMTPException):
+            self.log_error("could not send the verification code")
+            raise ApiError(502, "mail_failed")
+        self.send_json(200, {"ok": True, "pending": token, "email": mask(email), "delivery": how,
+                             "resendAfter": RESEND_SECONDS})
+
+    def pending_row(self):
+        data = self.read_json()
+        token = data.get("pending")
+        if not isinstance(token, str) or not token:
+            raise ApiError(400, "bad_request")
+        with db_lock:
+            row = db.execute("SELECT * FROM pending WHERE token_hash=? AND expires>?", (sha(token), now_ms())).fetchone()
+        if not row:
+            raise ApiError(410, "expired")
+        return data, token, row
+
+    def resend(self):
+        _, token, row = self.pending_row()
+        t = now_ms()
+        if row["sends"] >= MAX_SENDS:
+            raise ApiError(429, "too_many")
+        if t - row["last_sent"] < RESEND_SECONDS * 1000:
+            raise ApiError(429, "wait")
+        code = new_code()
+        with db_lock:
+            db.execute("UPDATE pending SET code_hash=?,expires=?,last_sent=?,sends=sends+1,tries=0 WHERE token_hash=?",
+                       (sha(token + code), t + CODE_SECONDS * 1000, t, sha(token)))
+        self.deliver(token, row["email"], code)
+
+    def verify(self):
+        data, token, row = self.pending_row()
+        code = data.get("code")
+        if not isinstance(code, str):
+            raise ApiError(400, "bad_request")
+        if not hmac.compare_digest(sha(token + code.strip()), row["code_hash"]):
+            last = row["tries"] + 1 >= MAX_TRIES
+            with db_lock:
+                if last:
+                    db.execute("DELETE FROM pending WHERE token_hash=?", (sha(token),))
+                else:
+                    db.execute("UPDATE pending SET tries=tries+1 WHERE token_hash=?", (sha(token),))
+            raise ApiError(410, "expired") if last else ApiError(400, "wrong_code")
         t = now_ms()
         with db_lock:
             try:
@@ -363,14 +498,19 @@ class Handler(BaseHTTPRequestHandler):
                 # the first account, and the first one after the last administrator is gone, runs the admin panel
                 role = "user" if db.execute("SELECT 1 FROM accounts WHERE role='admin'").fetchone() else "admin"
                 cur = db.execute(
-                    "INSERT INTO accounts(login,login_key,hash,role,created,last_login) VALUES(?,?,?,?,?,?)",
-                    (login, login.casefold(), hashed, role, t, t))
+                    "INSERT INTO accounts(login,login_key,email,hash,role,created,last_login) VALUES(?,?,?,?,?,?,?)",
+                    (row["login"], row["login"].casefold(), row["email"], row["hash"], role, t, t))
+                db.execute("DELETE FROM pending WHERE token_hash=?", (sha(token),))
                 db.execute("COMMIT")
-            except sqlite3.IntegrityError:
+                taken = False
+            except sqlite3.IntegrityError:      # someone else confirmed the same login or address first
                 db.execute("ROLLBACK")
-                raise ApiError(409, "taken")
-            row = db.execute("SELECT * FROM accounts WHERE id=?", (cur.lastrowid,)).fetchone()
-        self.send_json(200, {"ok": True, "account": public(row)}, [self.start_session(row["id"])])
+                db.execute("DELETE FROM pending WHERE token_hash=?", (sha(token),))
+                taken = True
+            acc = None if taken else db.execute("SELECT * FROM accounts WHERE id=?", (cur.lastrowid,)).fetchone()
+        if taken:
+            raise ApiError(409, "taken")
+        self.send_json(200, {"ok": True, "account": public(acc)}, [self.start_session(acc["id"])])
 
     def login(self):
         ip = self.client_ip()

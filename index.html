@@ -57,7 +57,7 @@ section{display:flex;flex-direction:column;gap:22px}
 .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line);font-weight:500;padding:6px 12px;font-size:.9rem}
 .btn.danger{color:var(--rubric);border-color:var(--rubric)}
 .btn:disabled{opacity:.5;cursor:default}
-select,input[type=search],input[type=text],input[type=password],textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:9px 12px;max-width:100%}
+select,input[type=search],input[type=text],input[type=email],input[type=password],textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:9px 12px;max-width:100%}
 textarea{min-height:76px;resize:vertical;width:100%}
 textarea::placeholder,input::placeholder{color:var(--muted)}
 .status,.hint{color:var(--muted);margin:0}
@@ -142,6 +142,8 @@ pre{margin:0;padding:12px 14px;background:var(--surface);border:1px solid var(--
 .authcard{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:16px}
 .authcard label{font-size:.85rem;font-weight:500;display:flex;flex-direction:column;gap:6px}
 .authcard input{width:100%;background:var(--paper)}
+.authcard .verify{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.authcard .verify label{align-self:stretch}
 .lede{font-family:var(--font-read);font-size:1.05rem;color:var(--muted);margin:0}
 footer{color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:16px}
 footer p{margin:0 0 6px}
@@ -158,13 +160,17 @@ footer p{margin:0 0 6px}
       <button class="chip" type="button" id="auth-tab-register">Rejestracja</button>
     </div>
     <form class="form" id="auth-form">
-      <label for="auth-login">Login<input id="auth-login" type="text" autocomplete="username" maxlength="32" autocapitalize="none" spellcheck="false"></label>
-      <label for="auth-pass">Hasło<input id="auth-pass" type="password" autocomplete="current-password" maxlength="64"></label>
+      <label for="auth-login" id="auth-login-wrap">Login<input id="auth-login" type="text" autocomplete="username" maxlength="32" autocapitalize="none" spellcheck="false"></label>
+      <label for="auth-email" id="auth-email-wrap">Adres e-mail<input id="auth-email" type="email" autocomplete="email" maxlength="254" autocapitalize="none" spellcheck="false"></label>
+      <label for="auth-pass" id="auth-pass-wrap">Hasło<input id="auth-pass" type="password" autocomplete="current-password" maxlength="64"></label>
       <label for="auth-pass2" id="auth-pass2-wrap">Powtórz hasło<input id="auth-pass2" type="password" autocomplete="new-password" maxlength="64"></label>
+      <div class="verify" id="auth-verify" hidden>
+        <label for="auth-code">Kod weryfikacyjny<input id="auth-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" spellcheck="false"></label>
+        <button class="btn ghost" type="button" id="auth-resend">Wyślij ponownie</button>
+      </div>
       <button class="btn" id="auth-submit" type="submit">Zaloguj się</button>
       <p class="status" id="auth-status" role="status"></p>
     </form>
-    <p class="hint" id="auth-hint"></p>
     <div class="row">
       <button class="btn ghost" type="button" id="auth-guest">Kontynuuj bez konta</button>
       <button class="btn ghost" type="button" id="auth-forgot">Nie pamiętam hasła</button>
@@ -276,7 +282,7 @@ footer p{margin:0 0 6px}
       <div class="row"><button class="btn ghost" type="button" id="admin-refresh">Odśwież</button></div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>Login</th><th>Rola</th><th>Utworzono</th><th>Ostatnie logowanie</th><th>Działania</th></tr></thead>
+          <thead><tr><th>Login</th><th>E-mail</th><th>Rola</th><th>Utworzono</th><th>Ostatnie logowanie</th><th>Działania</th></tr></thead>
           <tbody id="admin-rows"></tbody>
         </table>
       </div>
@@ -411,6 +417,7 @@ function saveButton(key){const b=el("button","btn ghost");b.type="button";paintS
 // Opened as a plain file: accounts live in this browser's storage, with passwords kept as bcrypt hashes.
 let api=false,capsReady=false,sample=null;
 let session=null,account=null,authTab="login",authBusy=false,forgotArmed=false;
+let pendingReg=null;   // a registration waiting for its e-mail code: {token, email, delivery}
 const mode=()=>api?"server":"local";
 const bc=()=>(window.dcodeIO&&window.dcodeIO.bcrypt)||null;
 async function call(method,path,body){
@@ -439,7 +446,6 @@ const localB={
   async remove(id){const a=this.all();delete a[id];store.set("slowo.accounts",a);["main","extra","favs","src"].forEach(k=>store.del("slowo.u."+id+"."+k))}
 };
 const serverB={
-  async register(login,password){return (await call("POST","register",{login,password})).account},
   async login(login,password){return (await call("POST","login",{login,password})).account},
   async logout(){try{await call("POST","logout")}catch(e){}},
   async list(){return (await call("GET","admin/accounts")).accounts},
@@ -485,34 +491,74 @@ function logout(message){
 }
 function showApp(){$("auth-screen").hidden=true;$("app").hidden=false;fillBooks();route();renderAll()}
 function showAuth(message){
-  $("app").hidden=true;$("auth-screen").hidden=false;forgotArmed=false;
+  $("app").hidden=true;$("auth-screen").hidden=false;forgotArmed=false;pendingReg=null;
   $("auth-pass").value="";$("auth-pass2").value="";renderAuth();$("auth-status").textContent=message||"";
 }
 function renderAuth(){
-  const reg=authTab==="register";
+  const reg=authTab==="register",ver=!!pendingReg,srv=mode()==="server";
   $("auth-tab-login").setAttribute("aria-pressed",String(!reg));$("auth-tab-register").setAttribute("aria-pressed",String(reg));
-  $("auth-pass2-wrap").hidden=!reg;$("auth-pass").autocomplete=reg?"new-password":"current-password";
-  $("auth-submit").textContent=reg?"Załóż konto":"Zaloguj się";$("auth-submit").disabled=authBusy;
-  $("auth-forgot").hidden=reg||mode()==="server";$("auth-forgot").textContent=forgotArmed?"Tak, usuń to konto":"Nie pamiętam hasła";
-  $("auth-hint").textContent=(!capsReady?"Sprawdzam, gdzie zapisane są konta… "
-    :mode()==="server"?"Zapisane cytaty i ustawienia masz na każdym urządzeniu, na którym się zalogujesz. "
-    :"Konto jest zapisywane w tej przeglądarce i działa tylko na tym urządzeniu. ")
-    +"Nie używaj tu hasła z innych serwisów.";
+  $("auth-login-wrap").hidden=ver;$("auth-pass-wrap").hidden=ver;
+  $("auth-email-wrap").hidden=ver||!reg||!srv;      // the address is checked with a code, which only the server can send
+  $("auth-pass2-wrap").hidden=ver||!reg;$("auth-pass").autocomplete=reg?"new-password":"current-password";
+  $("auth-verify").hidden=!ver;$("auth-resend").disabled=authBusy;
+  $("auth-submit").textContent=ver?"Potwierdź kod":reg?"Załóż konto":"Zaloguj się";$("auth-submit").disabled=authBusy;
+  $("auth-forgot").hidden=ver||reg||srv;$("auth-forgot").textContent=forgotArmed?"Tak, usuń to konto":"Nie pamiętam hasła";
+}
+const sentText=again=>pendingReg.delivery==="console"
+  ?"Serwer nie ma skonfigurowanej poczty, więc kod dla "+pendingReg.email+" został wypisany w konsoli serwera."
+  :(again?"Wysłaliśmy nowy kod na adres ":"Wysłaliśmy 6-cyfrowy kod na adres ")+pendingReg.email+". Wpisz go poniżej. Kod jest ważny 15 minut.";
+async function verifySubmit(){
+  const say=t=>{$("auth-status").textContent=t},code=$("auth-code").value.trim();
+  if(!/^\d{6}$/.test(code)){say("Wpisz 6-cyfrowy kod z wiadomości.");return}
+  authBusy=true;renderAuth();say("Sprawdzam kod…");
+  try{
+    const d=await call("POST","verify",{pending:pendingReg.token,code});
+    pendingReg=null;say("");enter(d.account);
+  }catch(e){
+    if(e.status===410||e.status===409)pendingReg=null;      // this registration is over; back to the form
+    say(e.message==="wrong_code"?"Kod jest nieprawidłowy. Sprawdź wiadomość i spróbuj ponownie."
+      :e.status===410?"Kod wygasł albo został wpisany błędnie zbyt wiele razy. Zarejestruj się jeszcze raz."
+      :e.status===409?"Ten login albo adres e-mail został w międzyczasie zajęty. Zarejestruj się jeszcze raz."
+      :"Nie udało się połączyć z serwerem. Sprawdź połączenie i spróbuj ponownie.");
+  }finally{authBusy=false;$("auth-code").value="";renderAuth()}
+}
+async function resendCode(){
+  if(authBusy||!pendingReg)return;
+  const say=t=>{$("auth-status").textContent=t};
+  authBusy=true;renderAuth();say("Wysyłam nowy kod…");
+  try{
+    const d=await call("POST","resend",{pending:pendingReg.token});
+    pendingReg.delivery=d.delivery;say(sentText(true));
+  }catch(e){
+    if(e.status===410)pendingReg=null;
+    say(e.message==="wait"?"Nowy kod można wysłać raz na minutę. Spróbuj za chwilę."
+      :e.message==="too_many"?"Wysłaliśmy już maksymalną liczbę kodów. Zarejestruj się jeszcze raz."
+      :e.status===410?"Ta rejestracja wygasła. Zarejestruj się jeszcze raz."
+      :e.message==="mail_failed"?"Nie udało się wysłać wiadomości z kodem. Spróbuj ponownie później."
+      :"Nie udało się połączyć z serwerem. Sprawdź połączenie i spróbuj ponownie.");
+  }finally{authBusy=false;renderAuth()}
 }
 async function authSubmit(){
   if(authBusy)return;
+  if(pendingReg)return verifySubmit();
   const say=t=>{$("auth-status").textContent=t};
   if(!capsReady){say("Jeszcze sprawdzam, gdzie zapisane są konta. Spróbuj za chwilę.");return}
-  const login=$("auth-login").value.trim(),pw=$("auth-pass").value,reg=authTab==="register";
+  const login=$("auth-login").value.trim(),pw=$("auth-pass").value,reg=authTab==="register",email=$("auth-email").value.trim();
   if(reg){
     if(!validLogin(login)){say("Login ma mieć od 3 do 32 znaków: litery, cyfry, kropka, myślnik lub podkreślenie.");return}
+    if(mode()==="server"&&!/^[^@\s]+@[^@\s]+\.[^@\s.]{2,}$/.test(email)){say("Podaj poprawny adres e-mail. Wyślemy na niego kod weryfikacyjny.");return}
     if(pw.length<8){say("Hasło musi mieć co najmniej 8 znaków.");return}
     if(pw!==$("auth-pass2").value){say("Hasła nie są takie same.");return}
   }else if(!login||!pw){say("Wpisz login i hasło.");return}
   authBusy=true;forgotArmed=false;renderAuth();say(reg?"Zakładam konto…":"Sprawdzam hasło…");
   try{
-    if(mode()==="server"){
-      const acc=reg?await serverB.register(login,pw):await serverB.login(login,pw);
+    if(mode()==="server"&&reg){
+      // the account is created only after the code sent to this address is confirmed
+      const d=await call("POST","register",{login,email,password:pw});
+      pendingReg={token:d.pending,email:d.email,delivery:d.delivery};$("auth-code").value="";
+      say(sentText(false));setTimeout(()=>$("auth-code").focus(),0);
+    }else if(mode()==="server"){
+      const acc=await serverB.login(login,pw);
       say("");enter(acc);
     }else if(reg){
       if(await localB.get(login)){say("Ten login jest już zajęty.");return}
@@ -525,7 +571,10 @@ async function authSubmit(){
       localB.touch(acc.id);say("");enter(acc);
     }
   }catch(e){
-    say(e&&e.status===409?"Ten login jest już zajęty."
+    say(e&&e.message==="email_taken"?"Na ten adres e-mail jest już założone konto."
+      :e&&e.message==="invalid_email"?"Podaj poprawny adres e-mail."
+      :e&&e.message==="mail_failed"?"Nie udało się wysłać wiadomości z kodem. Spróbuj ponownie później."
+      :e&&e.status===409?"Ten login jest już zajęty."
       :e&&e.status===401?"Błędny login lub hasło."
       :e&&e.status===429?"Za dużo prób. Spróbuj ponownie za kilkanaście minut."
       :e&&e.status===400?"Serwer nie przyjął tych danych. Sprawdź login i hasło."
@@ -825,7 +874,7 @@ function paintAdmin(){
       rowBox.append(del);
     }
     act.append(rowBox);
-    tr.append(el("td",null,String(a.login||"—")),role,el("td",null,fmtDate(a.created)),el("td",null,fmtDate(a.lastLogin)),act);
+    tr.append(el("td",null,String(a.login||"—")),el("td",null,String(a.email||"—")),role,el("td",null,fmtDate(a.created)),el("td",null,fmtDate(a.lastLogin)),act);
     body.append(tr);
   });
 }
@@ -876,8 +925,9 @@ $("prayer-pick").addEventListener("change",()=>{prayerIdx=Number($("prayer-pick"
 $("lang-toggle").addEventListener("click",()=>openLangs($("lang-panel").hidden));
 document.addEventListener("click",ev=>{if(!$("lang-panel").hidden&&!$("langpick").contains(ev.target))openLangs(false)});
 document.addEventListener("keydown",ev=>{if(ev.key==="Escape")openLangs(false)});
-$("auth-tab-login").addEventListener("click",()=>{authTab="login";forgotArmed=false;renderAuth();$("auth-status").textContent=""});
-$("auth-tab-register").addEventListener("click",()=>{authTab="register";forgotArmed=false;renderAuth();$("auth-status").textContent=""});
+$("auth-tab-login").addEventListener("click",()=>{authTab="login";forgotArmed=false;pendingReg=null;renderAuth();$("auth-status").textContent=""});
+$("auth-tab-register").addEventListener("click",()=>{authTab="register";forgotArmed=false;pendingReg=null;renderAuth();$("auth-status").textContent=""});
+$("auth-resend").addEventListener("click",resendCode);
 $("auth-form").addEventListener("submit",ev=>{ev.preventDefault();authSubmit()});
 $("auth-guest").addEventListener("click",asGuest);
 $("auth-forgot").addEventListener("click",forgot);
