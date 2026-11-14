@@ -152,24 +152,31 @@ pre{margin:0;padding:12px 14px;background:var(--surface);border:1px solid var(--
 .brand h1{display:flex;align-items:center;gap:10px}
 .mark{width:26px;height:26px;flex:none}
 
-/* app layout: the views are picked in a column on the left; on a narrow screen that column becomes a row above the content */
-#app>.main{display:contents}
+/* app layout: a side column on the left with the logo, the views and the theme switch.
+   On a phone there is no room for it: the views become a row above the content and the switch sits in the top corner. */
+#app{position:relative}
+#app>.main,#app>.side{display:contents}
 #app>.main>header{order:-2}
-#app>nav{order:-1}
-@media (min-width:900px){
-  #app{max-width:980px;flex-direction:row;align-items:flex-start;gap:44px}
+#app>.side>nav{order:-1}
+#app>.side>.logo,#app nav .label{display:none}
+#app>.side>.iconbtn{position:absolute;top:14px;right:20px;width:40px;height:40px}
+#app .brand{padding-right:52px}
+@media (min-width:720px){
+  #app{max-width:980px;flex-direction:row;align-items:flex-start;gap:36px}
   #app>.main{display:flex;flex-direction:column;gap:22px;flex:1;min-width:0;max-width:680px}
-  #app>nav{order:0;flex:none;width:210px;position:sticky;top:20px;flex-direction:column;gap:4px;border-bottom:0;border-right:1px solid var(--line);padding:4px 16px 4px 0;overflow:visible}
-  #app>nav a{white-space:normal;border-bottom:0;margin-bottom:0;border-left:3px solid transparent;border-radius:0 6px 6px 0;padding:9px 12px}
-  #app>nav a:hover{background:var(--surface)}
-  #app>nav a[aria-current="page"]{border-left-color:var(--rubric);background:var(--surface)}
-  #app>nav .label{padding:0 12px 8px 15px}
+  #app>.side{display:flex;flex-direction:column;gap:16px;flex:none;width:200px;position:sticky;top:20px;max-height:calc(100vh - 40px);overflow-y:auto;border-right:1px solid var(--line);padding:0 16px 8px 0}
+  #app>.side>.logo{display:block;width:104px;margin:0 0 0 10px}
+  #app>.side>nav{order:0;flex-direction:column;gap:4px;border-bottom:0;overflow:visible}
+  #app nav a{white-space:normal;border-bottom:0;margin-bottom:0;border-left:3px solid transparent;border-radius:0 6px 6px 0;padding:9px 12px}
+  #app nav a:hover{background:var(--surface)}
+  #app nav a[aria-current="page"]{border-left-color:var(--rubric);background:var(--surface)}
+  #app nav .label{display:block;padding:0 12px 8px 15px}
+  #app>.side>.iconbtn{position:static;width:46px;height:46px;margin-left:14px;flex:none}
+  #app .brand{padding-right:0}
+  .mark{display:none}
 }
-#app>nav .label{display:none}
-@media (min-width:900px){#app>nav .label{display:block}}
 footer{color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:16px}
 footer p{margin:0 0 6px}
-.themebar{display:flex;justify-content:center;padding-top:14px}
 .iconbtn{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .iconbtn:hover{border-color:var(--muted)}
 .iconbtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -177,8 +184,7 @@ footer p{margin:0 0 6px}
 </style>
 </head>
 <body>
-<main class="page auth" id="auth-screen" hidden>
-  <svg class="logo" viewBox="0 0 160 150" role="img" aria-label="Krzyż w promieniach nad otwartą księgą">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><g id="logo-art">
     <circle cx="80" cy="62" r="52" fill="none" stroke="var(--rubric)" stroke-width="9" stroke-dasharray="1.7 11.913" opacity=".55"/>
     <circle cx="80" cy="62" r="40" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
     <circle cx="80" cy="62" r="34" fill="none" stroke="var(--rubric)" stroke-width="1" opacity=".45"/>
@@ -191,7 +197,9 @@ footer p{margin:0 0 6px}
       <path d="M52 123.500c8-1.500 15.500-1 22 1.800M52 128.500c8-1.500 15.500-1 22 1.800"/>
       <path d="M108 123.500c-8-1.500-15.500-1-22 1.800M108 128.500c-8-1.500-15.500-1-22 1.800"/>
     </g>
-  </svg>
+</g></defs></svg>
+<main class="page auth" id="auth-screen" hidden>
+  <svg class="logo" viewBox="0 0 160 150" role="img" aria-label="Krzyż w promieniach nad otwartą księgą"><use href="#logo-art"/></svg>
   <div class="brand"><h1>Słowo na dziś</h1></div>
   <p class="lede">Cytat z Biblii na każdy dzień, modlitwa i rozmowa o tym, co przeżywasz.</p>
   <div class="authcard">
@@ -219,16 +227,22 @@ footer p{margin:0 0 6px}
 </main>
 
 <div class="page" id="app" hidden>
-  <nav aria-label="Widoki">
-    <span class="label">Widoki</span>
-    <a href="#dzis" id="tab-dzis">Cytat dnia</a>
-    <a href="#modlitwa" id="tab-modlitwa">Modlitwa na dziś</a>
-    <a href="#sytuacja" id="tab-sytuacja">Moja sytuacja</a>
-    <a href="#st" id="tab-st">Stary Testament</a>
-    <a href="#nt" id="tab-nt">Nowy Testament</a>
-    <a href="#zapisane" id="tab-zapisane">Zapisane</a>
-    <a href="#konto" id="tab-konto">Konto</a>
-  </nav>
+  <aside class="side">
+    <svg class="logo" viewBox="0 0 160 150" aria-hidden="true"><use href="#logo-art"/></svg>
+    <nav aria-label="Widoki">
+      <span class="label">Widoki</span>
+      <a href="#dzis" id="tab-dzis">Cytat dnia</a>
+      <a href="#modlitwa" id="tab-modlitwa">Modlitwa na dziś</a>
+      <a href="#sytuacja" id="tab-sytuacja">Moja sytuacja</a>
+      <a href="#nt" id="tab-nt">Biblia</a>
+      <a href="#zapisane" id="tab-zapisane">Zapisane</a>
+      <a href="#konto" id="tab-konto">Konto</a>
+    </nav>
+    <button class="iconbtn" type="button" id="theme-toggle">
+      <svg id="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.500v2.400M12 19.100v2.400M2.500 12h2.400M19.100 12h2.400M5.300 5.300l1.700 1.700M17 17l1.700 1.700M5.300 18.700l1.700-1.700M17 7l1.700-1.700"/></svg>
+      <svg id="theme-moon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M20.500 14.200A8.500 8.500 0 0 1 9.800 3.500a8.500 8.500 0 1 0 10.700 10.700z"/></svg>
+    </button>
+  </aside>
   <div class="main">
   <header>
     <div class="brand">
@@ -289,7 +303,11 @@ footer p{margin:0 0 6px}
   </section>
 
   <section id="view-nt" hidden>
-    <h2 id="reader-title"></h2>
+    <h2>Biblia</h2>
+    <div class="row" role="group" aria-label="Testament"><span class="label">Testament</span>
+      <button class="chip" type="button" id="t-ot">Stary Testament</button>
+      <button class="chip" type="button" id="t-nt">Nowy Testament</button>
+    </div>
     <div class="row">
       <label class="label" for="book">Księga</label>
       <select id="book"></select>
@@ -337,12 +355,6 @@ footer p{margin:0 0 6px}
   <footer>
     <p>Przekłady z domeny publicznej: Biblia Gdańska (wyd. 1881), King James Version, Reina-Valera 1909, Elberfelder 1905, Crampon 1923, Riveduta (Luzzi), Bibeln 1917. Stąd dawny język. Numeracja wersetów zgodna z danym przekładem, dlatego w kilku miejscach ten sam numer w różnych językach wskazuje sąsiedni werset.</p>
     <p>Cytat dnia zmienia się o północy czasu twojego urządzenia.</p>
-    <div class="themebar">
-      <button class="iconbtn" type="button" id="theme-toggle">
-        <svg id="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.500v2.400M12 19.100v2.400M2.500 12h2.400M19.100 12h2.400M5.300 5.300l1.700 1.700M17 17l1.700 1.700M5.300 18.700l1.700-1.700M17 7l1.700-1.700"/></svg>
-        <svg id="theme-moon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M20.500 14.200A8.500 8.500 0 0 1 9.800 3.500a8.500 8.500 0 1 0 10.700 10.700z"/></svg>
-      </button>
-    </div>
   </footer>
   </div>
 </div>
@@ -454,6 +466,7 @@ let pos=store.get("slowo.pos",null);
 if(Array.isArray(pos))pos=pos.length===3?{[pos[0]]:[pos[1],pos[2]]}:{nt:pos};
 if(!pos||typeof pos!=="object")pos={};
 ["ot","nt"].forEach(t=>{const q=pos[t],C=TS[t].c;if(!Array.isArray(q)||!C[q[0]]||!(q[1]>=1&&q[1]<=C[q[0]].length))pos[t]=[0,1]});
+let rt=store.get("slowo.rt","nt")==="ot"?"ot":"nt";      // the testament picked in the Bible view
 let query="",view="dzis";
 let cloud=null,cloudState="local",saveTimer=null,saving=Promise.resolve();
 function persist(){
@@ -846,8 +859,9 @@ function pickTheme(k){
 }
 
 /* ---------- Bible reader: Old and New Testament ---------- */
-// each testament has its own tab, with its own place, list of books and search
-const readerT=()=>view==="st"?"ot":view==="nt"?"nt":null;
+// the testament is picked first; each one keeps its own place, list of books and search
+const readerT=()=>view==="nt"?rt:null;
+function setTestament(t){if(t===rt)return;rt=t;store.set("slowo.rt",rt);query="";$("q").value="";fillBooks();renderReader()}
 function fillBooks(){
   const t=readerT();if(!t)return;
   const s=$("book");s.textContent="";
@@ -876,7 +890,7 @@ function verseButton(t,b,c,v,text,withRef){
 function renderReader(){
   const t=readerT();if(!t)return;
   const box=$("reader"),st=$("nt-status");box.textContent="";
-  $("reader-title").textContent=TNAME[t];$("clear").hidden=!query;
+  $("t-ot").setAttribute("aria-pressed",String(t==="ot"));$("t-nt").setAttribute("aria-pressed",String(t==="nt"));$("clear").hidden=!query;
   if(!ensure(t,main)){st.textContent=loading[t+"-"+main]==="error"?"Nie udało się wczytać tego przekładu. Sprawdź połączenie i odśwież stronę.":"Wczytuję przekład…";return}
   const d=window[TS[t].g][main],where=t==="ot"?"Starym Testamencie":"Nowym Testamencie";
   if(query){
@@ -959,14 +973,12 @@ async function loadAdmin(){
 }
 
 /* ---------- wiring ---------- */
-const VIEWS=["dzis","modlitwa","sytuacja","st","nt","zapisane","konto"];
-const sectionOf=n=>n==="st"?"nt":n;      // both testaments are read in the same section
+const VIEWS=["dzis","modlitwa","sytuacja","nt","zapisane","konto"];
 function route(){
-  const h=location.hash.slice(1),was=view;view=VIEWS.includes(h)?h:"dzis";
-  VIEWS.forEach(n=>{
-    if(sectionOf(n)===n)$("view-"+n).hidden=n!==sectionOf(view);
-    if(n===view)$("tab-"+n).setAttribute("aria-current","page");else $("tab-"+n).removeAttribute("aria-current");
-  });
+  let h=location.hash.slice(1);const was=view;
+  if(h==="st"){h="nt";rt="ot";store.set("slowo.rt",rt)}      // the address of the former Old Testament tab
+  view=VIEWS.includes(h)?h:"dzis";
+  VIEWS.forEach(n=>{$("view-"+n).hidden=n!==view;if(n===view)$("tab-"+n).setAttribute("aria-current","page");else $("tab-"+n).removeAttribute("aria-current")});
   if(readerT()){if(was!==view){query="";$("q").value=""}fillBooks()}
   if(view==="modlitwa"&&(was!=="modlitwa"||prayerIdx===null))nextPrayer();
   deleteArmed=false;adminArmed=null;
@@ -979,6 +991,8 @@ $("searchform").addEventListener("submit",ev=>{ev.preventDefault();const q=$("q"
 $("clear").addEventListener("click",()=>go(pos[readerT()][0],pos[readerT()][1]));
 $("book").addEventListener("change",()=>go(Number($("book").value),1));
 $("chapter").addEventListener("change",()=>go(pos[readerT()][0],Number($("chapter").value)));
+$("t-ot").addEventListener("click",()=>setTestament("ot"));
+$("t-nt").addEventListener("click",()=>setTestament("nt"));
 $("prev").addEventListener("click",()=>step(-1));
 $("next").addEventListener("click",()=>step(1));
 $("src-sel").addEventListener("click",()=>{src="sel";persist();renderAll()});
