@@ -1,3 +1,4 @@
 slowo.db
 __pycache__/
 *.zip
+.env

@@ -4,10 +4,13 @@
 Run:  py server.py        (then open http://127.0.0.1:8000)
 Environment: HOST, PORT, SLOWO_DB (database file), SLOWO_SECURE=1 (cookies only over HTTPS),
 TRUST_PROXY=1 (take the client address and scheme from X-Forwarded-* headers).
+SLOWO_ADMIN (login that gets the admin panel; without it the very first account does),
+SLOWO_HOSTS (comma-separated host names the app answers to; others are refused).
 Mail for verification codes: SMTP_HOST, SMTP_PORT (587, or 465 for implicit TLS), SMTP_USER,
 SMTP_PASSWORD, SMTP_FROM. Without SMTP_HOST the code is printed to this console instead of being sent.
 Needs only the Python standard library.
 """
+import base64
 import gzip
 import hashlib
 import hmac
@@ -15,6 +18,7 @@ import json
 import os
 import re
 import secrets
+import signal
 import smtplib
 import sqlite3
 import ssl
@@ -30,6 +34,10 @@ HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8000"))
 SECURE = os.environ.get("SLOWO_SECURE") == "1"
 TRUST_PROXY = os.environ.get("TRUST_PROXY") == "1"
+ADMIN_LOGIN = os.environ.get("SLOWO_ADMIN", "").strip().casefold()
+ALLOWED_HOSTS = {h.strip().lower() for h in os.environ.get("SLOWO_HOSTS", "").split(",") if h.strip()}
+MAX_CONNECTIONS = 128       # connections served at once; further ones are dropped
+API_PER_MINUTE = 300        # API requests one address may make in a minute
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER", "")
@@ -194,6 +202,30 @@ def static_file(path):
     return None
 
 
+INLINE_SCRIPT_RE = re.compile(rb"<script>(.*?)</script>", re.S)
+csp_cache = {}
+
+
+def unix_newlines(data):
+    """CRLF and lone CR as LF, the way a browser reads a page before it hashes a script."""
+    return data.replace(bytes([13, 10]), bytes([10])).replace(bytes([13]), bytes([10]))
+
+
+def page_policy(etag, raw):
+    """The Content-Security-Policy for the page: only its own inline scripts (named by hash) and its own files run."""
+    hit = csp_cache.get("page")
+    if hit and hit[0] == etag:
+        return hit[1]
+    # a browser reads CRLF as LF before it hashes a script, so the hash is taken the same way
+    hashes = " ".join("'sha256-%s'" % base64.b64encode(hashlib.sha256(unix_newlines(m)).digest()).decode("ascii")
+                      for m in INLINE_SCRIPT_RE.findall(raw))
+    policy = ("default-src 'self'; script-src 'self' %s; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+              "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+              "base-uri 'none'; form-action 'self'; frame-ancestors 'none'" % hashes)
+    csp_cache["page"] = (etag, policy)
+    return policy
+
+
 def load_static(file_path):
     """Returns (etag, raw bytes, gzipped bytes), compressed once per file version."""
     st = os.stat(file_path)
@@ -219,7 +251,7 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "Slowo"
     sys_version = ""
-    timeout = 30
+    timeout = 20
 
     # ----- plumbing -----
     def client_ip(self):
@@ -239,6 +271,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")
         self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+        if self.is_https():
+            self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        if not any(k == "Content-Security-Policy" for k, _ in extra):      # everything but the page itself: nothing may load or run
+            self.send_header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
         for k, v in extra:
             self.send_header(k, v)
         self.end_headers()
@@ -263,9 +302,11 @@ class Handler(BaseHTTPRequestHandler):
     def read_json(self):
         if not self.body:
             return {}
+        if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
+            raise ApiError(415, "unsupported_type")
         try:
             data = json.loads(self.body.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, RecursionError):      # RecursionError: absurdly deep nesting
             raise ApiError(400, "bad_request")
         if not isinstance(data, dict):
             raise ApiError(400, "bad_request")
@@ -328,7 +369,13 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         try:
             self.body = self.read_body()
+            if ALLOWED_HOSTS and self.headers.get("Host", "").split(":")[0].lower() not in ALLOWED_HOSTS:
+                raise ApiError(400, "bad_host")
             if path.startswith("/api/"):
+                ip = self.client_ip()
+                if too_many(("api", ip), API_PER_MINUTE, 60):
+                    raise ApiError(429, "too_many")
+                note(("api", ip))
                 if self.command not in ("GET", "HEAD"):
                     self.check_origin()
                 self.api(self.command, path[5:])
@@ -358,6 +405,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+        if ctype.startswith("text/html"):
+            headers.append(("Content-Security-Policy", page_policy(etag, raw)))
         if "gzip" in self.headers.get("Accept-Encoding", ""):
             return self.send_bytes(200, packed, ctype, headers + [("Content-Encoding", "gzip")])
         self.send_bytes(200, raw, ctype, headers)
@@ -495,8 +544,12 @@ class Handler(BaseHTTPRequestHandler):
         with db_lock:
             try:
                 db.execute("BEGIN IMMEDIATE")
-                # the first account, and the first one after the last administrator is gone, runs the admin panel
-                role = "user" if db.execute("SELECT 1 FROM accounts WHERE role='admin'").fetchone() else "admin"
+                # The admin panel goes to the login named in SLOWO_ADMIN, or without it to the very first account.
+                # A later account never becomes an administrator just because the earlier one is gone.
+                if ADMIN_LOGIN:
+                    role = "admin" if row["login"].casefold() == ADMIN_LOGIN else "user"
+                else:
+                    role = "user" if db.execute("SELECT 1 FROM accounts").fetchone() else "admin"
                 cur = db.execute(
                     "INSERT INTO accounts(login,login_key,email,hash,role,created,last_login) VALUES(?,?,?,?,?,?,?)",
                     (row["login"], row["login"].casefold(), row["email"], row["hash"], role, t, t))
@@ -548,9 +601,35 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(200, {"ok": True})
 
 
+class Server(ThreadingHTTPServer):
+    """Serves at most MAX_CONNECTIONS connections at once, so a flood of them cannot use up threads and memory."""
+    daemon_threads = True
+    request_queue_size = 64
+    slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+
+    def process_request(self, request, client_address):
+        if not self.slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        super().process_request(request, client_address)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
+
+    def handle_error(self, request, client_address):      # a dropped or timed-out connection is not worth a traceback
+        pass
+
+
+def stop(*_):
+    raise KeyboardInterrupt
+
+
 if __name__ == "__main__":
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    server.daemon_threads = True
+    server = Server((HOST, PORT), Handler)
+    signal.signal(signal.SIGTERM, stop)      # "docker stop" ends the server cleanly
     print("Slowo na dzis: http://%s:%d" % (HOST, PORT), flush=True)
     try:
         server.serve_forever()
