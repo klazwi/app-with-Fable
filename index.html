@@ -163,6 +163,24 @@ input[type=search]{flex:1;min-width:140px}
 .v[aria-pressed="true"]{border-left-color:var(--rubric);background:var(--rubric-soft)}
 .v sup{color:var(--rubric);font-family:var(--font-ui);font-weight:600;font-size:.7em;margin-right:.45em}
 .v .alt{display:block;color:var(--muted);font-size:.92rem;line-height:1.5;padding-top:4px}
+/* On a computer the Bible view fills the window: the pickers stay put and the verses scroll in a panel that reaches
+   the bottom edge, under a bar that says what is being shown. On a phone the panel is not there and the page scrolls. */
+.readbox{display:contents}
+.status b{margin-right:.45em;font-weight:600;color:var(--ink)}
+@media (min-width:720px){
+  body.reading #app>.main{height:100vh;padding-bottom:1.25rem}
+  body.reading #app>.main>footer{flex:none}
+  #app>.main>footer{padding-right:5.5rem}      /* keeps the note clear of the robot button */
+  body.chatting #app>.main>footer{padding-right:0}
+  body.reading #view-nt{flex:1;min-height:0}
+  .readbox{display:flex;flex-direction:column;flex:1;min-height:12rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
+  .readbox .status{flex:none;padding:.7rem 1.1rem;border-bottom:1px solid var(--line);color:var(--ink)}
+  .readbox .status b{font-family:var(--font-read);font-weight:500;font-size:1.1rem;margin-right:.5rem}
+  .readbox .status span{color:var(--muted);font-size:.9rem}
+  .readbox .reader{flex:1;min-height:0;overflow-y:auto;padding:.6rem .6rem 1.5rem;scrollbar-width:thin;overscroll-behavior:contain}
+  .readbox .v{max-width:none}
+  .readbox .v:hover{background:var(--paper)}
+}
 
 /* account, admin, sign-in */
 .account{display:flex;flex-direction:column;gap:10px}
@@ -190,7 +208,7 @@ pre{margin:0;padding:12px 14px;background:var(--surface);border:1px solid var(--
 
 /* app layout: a side column fixed to the left edge of the window, with the logo, the views and the theme switch.
    On a phone there is no room for it: the views become a row above the content and the switch sits in the top corner. */
-#app{position:relative}
+#app{position:relative;padding-bottom:6.5rem}
 #app>.main,#app>.side{display:contents}
 #app>.main>header{order:-2}
 #app>.side>nav{order:-1}
@@ -343,8 +361,10 @@ footer p{margin:0 0 6px}
       <button class="btn ghost" type="submit">Szukaj</button>
       <button class="btn ghost" type="button" id="clear" hidden>Wróć do rozdziału</button>
     </form>
-    <p class="status" id="nt-status"></p>
-    <div class="reader" id="reader"></div>
+    <div class="readbox">
+      <p class="status" id="nt-status"></p>
+      <div class="reader" id="reader"></div>
+    </div>
   </section>
 
   <section id="view-zapisane" hidden>
@@ -1003,9 +1023,14 @@ function verseButton(t,b,c,v,text,withRef){
   x.onclick=()=>toggleFav(key);
   return x;
 }
+const verseWord=n=>n===1?"werset":n%10>=2&&n%10<=4&&(n%100<10||n%100>=20)?"wersety":"wersetów";
+// the bar above the verses: what is shown, in which translation, and how much of it
+function readerInfo(title,detail){const st=$("nt-status");st.textContent="";st.append(el("b",null,title),el("span",null,detail))}
+let readerShown="";      // what the panel showed last, to keep its scroll position when only a saved mark changes
 function renderReader(){
   const t=readerT();if(!t)return;
-  const box=$("reader"),st=$("nt-status");box.textContent="";
+  const box=$("reader"),st=$("nt-status"),what=[t,pos[t][0],pos[t][1],query,main].join("|"),keep=what===readerShown?box.scrollTop:0;
+  readerShown=what;box.textContent="";
   $("t-ot").setAttribute("aria-pressed",String(t==="ot"));$("t-nt").setAttribute("aria-pressed",String(t==="nt"));$("clear").hidden=!query;
   if(!ensure(t,main)){st.textContent=loading[t+"-"+main]==="error"?"Nie udało się wczytać tego przekładu. Sprawdź połączenie i odśwież stronę.":"Wczytuję przekład…";return}
   const d=window[TS[t].g][main],where=t==="ot"?"Starym Testamencie":"Nowym Testamencie";
@@ -1014,13 +1039,16 @@ function renderReader(){
     for(let b=0;b<d.length;b++)for(let c=0;c<d[b].length;c++)for(let v=0;v<d[b][c].length;v++){
       if(d[b][c][v]&&norm(d[b][c][v]).includes(q)){total++;if(hits.length<60)hits.push([b,c+1,v+1,d[b][c][v]])}
     }
-    st.textContent=total?("W "+where+" znaleziono "+total+" wersetów ze słowem „"+query+"”"+(total>60?", pokazuję pierwsze 60.":".")+" Dotknij wersetu, żeby go zapisać."):("Nie znalazłem „"+query+"” w "+where+" w przekładzie "+TR[main]+". Szukam w języku głównym, więc wpisz słowo w tym języku.");
+    if(total)readerInfo("Szukane: „"+query+"”",TNAME[t]+" · "+TR[main]+" · "+total+" "+verseWord(total)+(total>60?", pokazuję pierwsze 60":"")+". Dotknij wersetu, żeby go zapisać.");
+    else readerInfo("Szukane: „"+query+"”","Nie znalazłem tego w "+where+" w przekładzie "+TR[main]+". Szukam w języku głównym, więc wpisz słowo w tym języku.");
     hits.forEach(h=>box.append(verseButton(t,h[0],h[1],h[2],h[3],true)));
+    box.scrollTop=keep;
     return;
   }
   const [b,c]=pos[t],ch=d[b][c-1]||[];
-  st.textContent=TS[t].n[main][b]+" "+c+" · "+TR[main]+(ch.length?". Dotknij wersetu, żeby go zapisać.":". Tego rozdziału nie ma w tym przekładzie.");
+  readerInfo(TS[t].n[main][b]+" "+c,TNAME[t]+" · "+TR[main]+(ch.length?" · "+ch.length+" "+verseWord(ch.length)+". Dotknij wersetu, żeby go zapisać.":". Tego rozdziału nie ma w tym przekładzie."));
   ch.forEach((x,i)=>box.append(verseButton(t,b,c,i+1,x,false)));
+  box.scrollTop=keep;
 }
 
 /* ---------- saved, account, admin panel ---------- */
@@ -1096,6 +1124,7 @@ function route(){
   if(h==="sytuacja"){h=view;openChat(true);try{history.replaceState(null,"","#"+view)}catch(e){}}      // the conversation is a window, not a view
   view=VIEWS.includes(h)?h:"dzis";
   VIEWS.forEach(n=>{$("view-"+n).hidden=n!==view;if(n===view)$("tab-"+n).setAttribute("aria-current","page");else $("tab-"+n).removeAttribute("aria-current")});
+  document.body.classList.toggle("reading",view==="nt");
   if(readerT()){if(was!==view){query="";$("q").value=""}fillBooks()}
   if(view==="modlitwa"&&(was!=="modlitwa"||prayerIdx===null))nextPrayer();
   deleteArmed=false;adminArmed=null;
