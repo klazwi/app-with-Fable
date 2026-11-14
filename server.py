@@ -221,7 +221,7 @@ def page_policy(etag, raw):
                       for m in INLINE_SCRIPT_RE.findall(raw))
     policy = ("default-src 'self'; script-src 'self' %s; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
               "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; "
-              "base-uri 'none'; form-action 'self'; frame-ancestors 'none'" % hashes)
+              "base-uri 'none'; form-action 'self'; frame-ancestors 'self'" % hashes)      # 'self': the phone preview frames the page
     csp_cache["page"] = (etag, policy)
     return policy
 
@@ -270,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")
-        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
