@@ -1,0 +1,43 @@
+# Słowo na dziś
+#   start:   docker compose up -d --build      then open http://127.0.0.1:8000
+#   stop:    docker compose down                (accounts stay in the slowo-data volume)
+#   logs:    docker compose logs -f             (verification codes appear here while no mail server is set)
+# Settings come from a .env file next to this one; .env.example lists them.
+
+services:
+  slowo:
+    build: .
+    image: slowo-na-dzis:latest
+    restart: unless-stopped
+    init: true
+    ports:
+      # Reachable only from this computer by default. To serve other devices, put a reverse proxy with HTTPS
+      # in front and set SLOWO_SECURE=1 and TRUST_PROXY=1; SLOWO_BIND=0.0.0.0 publishes the port itself.
+      - "${SLOWO_BIND:-127.0.0.1}:${SLOWO_PORT:-8000}:8000"
+    environment:
+      SLOWO_SECURE: "${SLOWO_SECURE:-0}"
+      TRUST_PROXY: "${TRUST_PROXY:-0}"
+      SLOWO_ADMIN: "${SLOWO_ADMIN:-}"
+      SLOWO_HOSTS: "${SLOWO_HOSTS:-}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+    volumes:
+      - slowo-data:/data
+    # The container gets as little as it needs: a read-only file system, no Linux capabilities,
+    # no way to gain privileges, and limits on processes, memory and processor time.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+
+volumes:
+  slowo-data:

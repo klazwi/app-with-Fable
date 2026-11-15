@@ -1,0 +1,11 @@
+.git
+.gitignore
+.claude
+.env
+.env.example
+.dockerignore
+Dockerfile
+docker-compose.yml
+slowo.db
+__pycache__
+*.zip
