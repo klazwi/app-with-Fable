@@ -9,3 +9,4 @@ docker-compose.yml
 slowo.db
 __pycache__
 *.zip
+README.md
