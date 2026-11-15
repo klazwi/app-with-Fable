@@ -84,7 +84,8 @@ CREATE TABLE IF NOT EXISTS pending(
   expires INTEGER NOT NULL,
   last_sent INTEGER NOT NULL,
   sends INTEGER NOT NULL DEFAULT 1,
-  tries INTEGER NOT NULL DEFAULT 0
+  tries INTEGER NOT NULL DEFAULT 0,
+  lang TEXT NOT NULL DEFAULT 'pl'
 );
 CREATE TABLE IF NOT EXISTS sessions(
   token_hash TEXT PRIMARY KEY,
@@ -101,6 +102,8 @@ CREATE TABLE IF NOT EXISTS state(
 
 if "email" not in [r["name"] for r in db.execute("PRAGMA table_info(accounts)")]:   # databases made before e-mail was required
     db.execute("ALTER TABLE accounts ADD COLUMN email TEXT")
+if "lang" not in [r["name"] for r in db.execute("PRAGMA table_info(pending)")]:
+    db.execute("ALTER TABLE pending ADD COLUMN lang TEXT NOT NULL DEFAULT 'pl'")
 db.execute("CREATE UNIQUE INDEX IF NOT EXISTS accounts_email ON accounts(lower(email)) WHERE email IS NOT NULL")
 
 
@@ -118,18 +121,26 @@ def mask(email):
     return name[:1] + "***@" + domain
 
 
-def send_code(email, code):
+MAIL_TEXT = {'pl': ['Słowo na dziś: kod weryfikacyjny %s', 'Twój kod weryfikacyjny do aplikacji Słowo na dziś: %s\n\nKod jest ważny %d minut. Jeśli to nie ty zakładasz konto, zignoruj tę wiadomość.\n'],
+             'en': ['Word for Today: verification code %s', 'Your verification code for the Word for Today app: %s\n\nThe code is valid for %d minutes. If you are not creating an account, ignore this message.\n'],
+             'es': ['Palabra para hoy: código de verificación %s', 'Tu código de verificación para la aplicación Palabra para hoy: %s\n\nEl código es válido durante %d minutos. Si no estás creando una cuenta, ignora este mensaje.\n'],
+             'de': ['Wort für heute: Bestätigungscode %s', 'Dein Bestätigungscode für die App Wort für heute: %s\n\nDer Code ist %d Minuten gültig. Wenn du kein Konto anlegst, ignoriere diese Nachricht.\n'],
+             'fr': ['Parole du jour : code de vérification %s', "Ton code de vérification pour l'application Parole du jour : %s\n\nLe code est valable %d minutes. Si tu ne crées pas de compte, ignore ce message.\n"],
+             'it': ['Parola per oggi: codice di verifica %s', "Il tuo codice di verifica per l'applicazione Parola per oggi: %s\n\nIl codice è valido per %d minuti. Se non stai creando un account, ignora questo messaggio.\n"],
+             'sv': ['Ordet för i dag: verifieringskod %s', 'Din verifieringskod för appen Ordet för i dag: %s\n\nKoden gäller i %d minuter. Om det inte är du som skapar ett konto kan du bortse från det här meddelandet.\n']}
+
+
+def send_code(email, code, lang="pl"):
     """Sends the verification code. Returns "email", or "console" when no mail server is configured."""
     if not SMTP_HOST:
         print("[mail] SMTP_HOST is not set; verification code for %s: %s" % (email, code), flush=True)
         return "console"
     msg = EmailMessage()
-    msg["Subject"] = "Słowo na dziś: kod weryfikacyjny %s" % code
+    subject, body = MAIL_TEXT.get(lang, MAIL_TEXT["pl"])
+    msg["Subject"] = subject % code
     msg["From"] = SMTP_FROM
     msg["To"] = email
-    msg.set_content("Twój kod weryfikacyjny do aplikacji Słowo na dziś: %s\n\n"
-                    "Kod jest ważny %d minut. Jeśli to nie ty zakładasz konto, zignoruj tę wiadomość.\n"
-                    % (code, CODE_SECONDS // 60))
+    msg.set_content(body % (code, CODE_SECONDS // 60))
     context = ssl.create_default_context()
     if SMTP_PORT == 465:
         smtp = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15, context=context)
@@ -476,6 +487,7 @@ class Handler(BaseHTTPRequestHandler):
         if not all(isinstance(x, str) for x in (login, password, email)):
             raise ApiError(400, "bad_request")
         login, email = login.strip(), email.strip()
+        lang = data.get("lang") if data.get("lang") in LANGS else "pl"
         if not LOGIN_RE.match(login) or not 8 <= len(password) <= 128:
             raise ApiError(400, "invalid")
         if len(email) > 254 or not EMAIL_RE.match(email):
@@ -490,13 +502,13 @@ class Handler(BaseHTTPRequestHandler):
         hashed = hash_password(password)
         with db_lock:
             db.execute("DELETE FROM pending WHERE expires<? OR lower(email)=lower(?)", (t, email))
-            db.execute("INSERT INTO pending(token_hash,login,email,hash,code_hash,expires,last_sent) VALUES(?,?,?,?,?,?,?)",
-                       (sha(token), login, email, hashed, sha(token + code), t + CODE_SECONDS * 1000, t))
-        self.deliver(token, email, code)
+            db.execute("INSERT INTO pending(token_hash,login,email,hash,code_hash,expires,last_sent,lang) VALUES(?,?,?,?,?,?,?,?)",
+                       (sha(token), login, email, hashed, sha(token + code), t + CODE_SECONDS * 1000, t, lang))
+        self.deliver(token, email, code, lang)
 
-    def deliver(self, token, email, code):
+    def deliver(self, token, email, code, lang):
         try:
-            how = send_code(email, code)
+            how = send_code(email, code, lang)
         except (OSError, smtplib.SMTPException):
             self.log_error("could not send the verification code")
             raise ApiError(502, "mail_failed")
@@ -525,7 +537,7 @@ class Handler(BaseHTTPRequestHandler):
         with db_lock:
             db.execute("UPDATE pending SET code_hash=?,expires=?,last_sent=?,sends=sends+1,tries=0 WHERE token_hash=?",
                        (sha(token + code), t + CODE_SECONDS * 1000, t, sha(token)))
-        self.deliver(token, row["email"], code)
+        self.deliver(token, row["email"], code, row["lang"])
 
     def verify(self):
         data, token, row = self.pending_row()
