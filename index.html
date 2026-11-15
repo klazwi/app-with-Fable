@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Słowo na dziś</title>
 <script>try{var t=JSON.parse(localStorage.getItem("slowo.theme"));if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -167,7 +167,7 @@ input[type=search]{flex:1;min-width:140px}
    the bottom edge, under a bar that says what is being shown. On a phone the panel is not there and the page scrolls. */
 .readbox{display:contents}
 .status b{margin-right:.45em;font-weight:600;color:var(--ink)}
-@media (min-width:720px){
+@media (min-width:720px) and (min-height:560px){      /* not on a phone held sideways: too little height for a panel */
   body.reading #app>.main{height:100vh;padding-bottom:1.25rem}
   body.reading #app>.main>footer{flex:none}
   #app>.main>footer{padding-right:5.5rem}      /* keeps the note clear of the robot button */
@@ -234,6 +234,41 @@ footer p{margin:0 0 6px}
 .iconbtn{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .iconbtn:hover{border-color:var(--muted)}
 .iconbtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* phones: room for the notch and the home bar, controls sized for a finger, nothing wider than the screen */
+@supports (padding:max(0px)){
+  .page{padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
+  .auth,#app{padding-top:max(20px,env(safe-area-inset-top))}
+  .robot{right:max(1.25rem,env(safe-area-inset-right));bottom:max(1.25rem,env(safe-area-inset-bottom))}
+}
+@media (max-width:719px){
+  /* all the views in sight at once, three to a row, instead of a row that has to be dragged sideways */
+  #app>.side>nav{display:grid;grid-template-columns:repeat(3,1fr);gap:0;overflow:visible;border-bottom:0}
+  #app nav a{display:flex;align-items:center;justify-content:center;text-align:center;white-space:normal;padding:9px 4px;font-size:.92rem;line-height:1.25;margin-bottom:0;border-bottom:2px solid var(--line)}
+  #app nav a[aria-current="page"]{border-bottom-color:var(--rubric)}
+  .robot{width:3.75rem;height:3.75rem}
+  .robot svg{width:2.8rem;height:2.8rem}
+  .chatwin{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+  #view-nt .row select{flex:1;min-width:0}
+  .verse.lead{padding:22px 18px 18px}
+  .auth{padding-top:max(28px,env(safe-area-inset-top))}
+}
+@media (max-width:359px){
+  .page{padding-left:14px;padding-right:14px}
+  h1{font-size:1.2rem}
+  .authcard{padding:18px}
+}
+@media (pointer:coarse){.chip,.btn.ghost,.topicitem{min-height:2.6rem}}
+
+/* phone preview: the app shown inside a phone-sized frame, to see on a computer how it looks on a phone */
+#app>.side>#phone-open{display:none}
+@media (min-width:720px){#app>.side>#phone-open{display:inline-flex;margin-top:-.4rem}}
+html.framed{scrollbar-width:none}      /* inside the preview: no desktop scroll bar, as on a phone */
+html.framed::-webkit-scrollbar{display:none}
+.phonestage{position:fixed;inset:0;z-index:50;background:var(--paper);display:flex;flex-direction:column;align-items:center;gap:1rem;padding:1rem;overflow:auto}
+.phonebar{flex:none;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:center}
+.phonewrap{flex:none}
+.phone{border:10px solid var(--ink);border-radius:46px;overflow:hidden;background:var(--paper);box-shadow:0 20px 60px rgba(0,0,0,.4);transform-origin:top left}
+.phone iframe{display:block;border:0;width:100%;height:100%}
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .6s ease}.switch .track::after{transition:left .15s ease}}
 </style>
 </head>
@@ -295,6 +330,9 @@ footer p{margin:0 0 6px}
     <button class="iconbtn" type="button" id="theme-toggle">
       <svg id="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.500v2.400M12 19.100v2.400M2.500 12h2.400M19.100 12h2.400M5.300 5.300l1.700 1.700M17 17l1.700 1.700M5.300 18.700l1.700-1.700M17 7l1.700-1.700"/></svg>
       <svg id="theme-moon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M20.500 14.200A8.500 8.500 0 0 1 9.800 3.500a8.500 8.500 0 1 0 10.700 10.700z"/></svg>
+    </button>
+    <button class="iconbtn" type="button" id="phone-open" aria-label="Wersja na telefon" title="Wersja na telefon">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.500" width="10" height="19" rx="2.400"/><path d="M11 18.300h2"/></svg>
     </button>
   </aside>
   <div class="main">
@@ -452,6 +490,16 @@ footer p{margin:0 0 6px}
       <p class="hint" id="mode"></p>
     </form>
   </div>
+</div>
+
+<div class="phonestage" id="phone-stage" hidden>
+  <div class="phonebar" id="phone-bar">
+    <span class="label">Wersja na telefon</span>
+    <label class="sr" for="phone-size">Rozmiar ekranu</label>
+    <select id="phone-size"></select>
+    <button class="btn ghost" type="button" id="phone-close">Wróć do wersji na komputer</button>
+  </div>
+  <div class="phonewrap" id="phone-wrap"><div class="phone" id="phone"><iframe id="phone-frame" title="Aplikacja w rozmiarze telefonu"></iframe></div></div>
 </div>
 
 <script src="vendor/bcrypt.min.js"></script>
@@ -1160,7 +1208,7 @@ P.forEach((e,i)=>{const o=el("option",null,e.n);o.value=i;$("prayer-pick").appen
 $("prayer-pick").addEventListener("change",()=>{prayerIdx=Number($("prayer-pick").value);renderPrayer()});
 $("lang-toggle").addEventListener("click",()=>openLangs($("lang-panel").hidden));
 document.addEventListener("click",ev=>{if(!$("lang-panel").hidden&&!$("langpick").contains(ev.target))openLangs(false)});
-document.addEventListener("keydown",ev=>{if(ev.key==="Escape"){openLangs(false);if(chatOpen)openChat(false)}});
+document.addEventListener("keydown",ev=>{if(ev.key==="Escape"){openLangs(false);if(!$("phone-stage").hidden)openPhone(false);else if(chatOpen)openChat(false)}});
 $("auth-tab-login").addEventListener("click",()=>{authTab="login";forgotArmed=false;pendingReg=null;renderAuth();$("auth-status").textContent=""});
 $("auth-tab-register").addEventListener("click",()=>{authTab="register";forgotArmed=false;pendingReg=null;renderAuth();$("auth-status").textContent=""});
 $("auth-resend").addEventListener("click",resendCode);
@@ -1169,6 +1217,28 @@ $("auth-guest").addEventListener("click",asGuest);
 $("auth-forgot").addEventListener("click",forgot);
 $("admin-refresh").addEventListener("click",loadAdmin);
 window.addEventListener("hashchange",route);
+
+/* ---------- phone preview ---------- */
+// The app is loaded again inside a frame the size of a phone screen, so it lays itself out as it does on that phone.
+const PHONES=[["iPhone 13",390,844],["iPhone SE",375,667],["iPhone 15 Pro Max",430,932],["Android, mały ekran",360,740],["Android, duży ekran",412,915]];
+PHONES.forEach(([name,w,h],i)=>{const o=el("option",null,name+" · "+w+" × "+h);o.value=i;$("phone-size").append(o)});
+function fitPhone(){
+  if($("phone-stage").hidden)return;
+  const [,w,h]=PHONES[$("phone-size").value],ph=$("phone"),W=w+20,H=h+20;      // 20 = the frame's border
+  const k=Math.min(1,(window.innerHeight-$("phone-bar").offsetHeight-48)/H,(window.innerWidth-32)/W);      // shrink to fit a small window
+  ph.style.width=W+"px";ph.style.height=H+"px";ph.style.transform="scale("+k+")";
+  $("phone-wrap").style.width=W*k+"px";$("phone-wrap").style.height=H*k+"px";
+}
+function openPhone(on){
+  $("phone-stage").hidden=!on;
+  $("phone-frame").src=on?location.pathname+location.search+location.hash:"about:blank";
+  if(on){fitPhone();$("phone-close").focus()}else $("phone-open").focus();
+}
+$("phone-open").addEventListener("click",()=>openPhone(true));
+$("phone-close").addEventListener("click",()=>openPhone(false));
+$("phone-size").addEventListener("change",fitPhone);
+window.addEventListener("resize",fitPhone);
+if(window.self!==window.top){$("phone-open").remove();document.documentElement.classList.add("framed")}      // already inside the preview
 
 /* ---------- light and dark theme ---------- */
 // The choice is kept on this device. Until one is made, the app follows the system setting.
